@@ -9,13 +9,33 @@ import * as url from 'url'
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 const electronInfo = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../node_modules/electron/package.json')))
+const appInfo = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../app/package.json')))
 
-export let version = childProcess.execSync('git describe --tags', { encoding:'utf-8' })
-version = version.substring(1).trim()
+function execGit (command) {
+    try {
+        return childProcess.execSync(command, { encoding: 'utf-8' }).trim()
+    } catch {
+        return null
+    }
+}
+
+function getFallbackVersion () {
+    const baseVersion = semver.parse(appInfo.version)
+    if (!baseVersion) {
+        throw new Error(`Invalid app version: ${appInfo.version}`)
+    }
+
+    const buildId = process.env.REV ?? process.env.GITHUB_RUN_NUMBER ?? execGit('git rev-list --count HEAD') ?? '0'
+    return `${baseVersion.major}.${baseVersion.minor}.${baseVersion.patch}-nightly.${buildId}`
+}
+
+const describedVersion = execGit('git describe --tags --match "v*"')
+
+export let version = describedVersion ? describedVersion.substring(1) : getFallbackVersion()
 version = version.replace('-', '-c')
 
-if (version.includes('-c')) {
-    version = semver.inc(version, 'prepatch').replace('-0', `-nightly.${process.env.REV ?? 0}`)
+if (describedVersion && version.includes('-c')) {
+    version = semver.inc(version, 'prepatch').replace('-0', `-nightly.${process.env.REV ?? process.env.GITHUB_RUN_NUMBER ?? 0}`)
 }
 
 export const builtinPlugins = [
