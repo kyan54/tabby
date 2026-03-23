@@ -4,6 +4,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     if: ${{ github.actor != 'dependabot[bot]' }}
+    env:
+      HAS_FIREBASE_DEPLOY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TABBY_DOCS != '' }}
 
     steps:
     - name: Checkout
@@ -32,6 +34,7 @@ jobs:
         DOCS_PRIVATE_KEY: ${{ secrets.DOCS_PRIVATE_KEY }}
 
     - uses: FirebaseExtended/action-hosting-deploy@v0
+      if: env.HAS_FIREBASE_DEPLOY == 'true'
       with:
         repoToken: '${{ secrets.GITHUB_TOKEN }}'
         firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_TABBY_DOCS }}'
