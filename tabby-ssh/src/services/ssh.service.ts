@@ -39,7 +39,7 @@ export class SSHService {
             const jumpUsername = jumpHostProfile.options.user
             uri += `;x-tunnelusername=${jumpUsername}`
             if (jumpHostProfile.options.auth === 'password') {
-                const jumpPassword = await this.passwordStorage.loadPassword(jumpHostProfile, jumpUsername)
+                const jumpPassword = await this.passwordStorage.loadPassword(jumpHostProfile, jumpUsername) ?? jumpHostProfile.options.password
                 if (jumpPassword) {
                     uri += `;x-tunnelpasswordplain=${encodeURIComponent(jumpPassword)}`
                 }
@@ -60,7 +60,7 @@ export class SSHService {
 
     async getWinSCPURI (profile: SSHProfile, cwd?: string, username?: string): Promise<{ uri: string, privateKeyFile?: tmp.FileResult|null }> {
         let uri = `scp://${username ?? profile.options.user}`
-        const password = await this.passwordStorage.loadPassword(profile, username)
+        const password = await this.passwordStorage.loadPassword(profile, username) ?? profile.options.password
         if (password) {
             uri += ':' + encodeURIComponent(password)
         }
