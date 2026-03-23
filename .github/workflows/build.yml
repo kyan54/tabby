@@ -1,5 +1,13 @@
 name: Package-Build
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: package-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   Lint:
     runs-on: ubuntu-24.04
@@ -46,6 +54,8 @@ jobs:
     env:
       ARCH: ${{matrix.arch}}
       RUST_TARGET_TRIPLE: ${{matrix.rust_triple}}
+      HAS_MAC_SIGNING: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' }}
+      HAS_SENTRY_SECRETS: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
 
     steps:
     - name: Checkout
@@ -81,7 +91,7 @@ jobs:
 
     - name: Build and sign packages
       run: scripts/build-macos.mjs
-      if: github.event_name == 'push' && (github.ref_protected || startsWith(github.ref, 'refs/tags'))
+      if: github.event_name == 'push' && (github.ref_protected || startsWith(github.ref, 'refs/tags')) && env.HAS_MAC_SIGNING == 'true'
       env:
         ARCH: ${{matrix.arch}}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +106,7 @@ jobs:
 
     - name: Build packages without signing
       run: scripts/build-macos.mjs
-      if: "! (github.event_name == 'push' && (github.ref_protected || startsWith(github.ref, 'refs/tags')))"
+      if: ${{ ! (github.event_name == 'push' && (github.ref_protected || startsWith(github.ref, 'refs/tags')) && env.HAS_MAC_SIGNING == 'true') }}
       env:
         ARCH: ${{matrix.arch}}
         # DEBUG: electron-builder,electron-builder:*
@@ -105,6 +115,7 @@ jobs:
       run: |
         sudo npm install -g @sentry/cli --unsafe-perm
         ./scripts/sentry-upload.mjs
+      if: env.HAS_SENTRY_SECRETS == 'true'
       env:
         SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -117,13 +128,13 @@ jobs:
         mkdir artifact-zip
         mv dist/*.zip artifact-zip/
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload DMG
       with:
         name: macOS .dmg (${{matrix.arch}})
         path: artifact-dmg
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload ZIP
       with:
         name: macOS .zip (${{matrix.arch}})
@@ -158,6 +169,8 @@ jobs:
       npm_config_arch: ${{matrix.build-arch}}
       npm_config_target_arch: ${{matrix.build-arch}}
       RUST_TARGET_TRIPLE: ${{matrix.rust_triple}}
+      HAS_SENTRY_SECRETS: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
+      HAS_PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN != '' }}
 
     steps:
     - name: Checkout
@@ -243,7 +256,7 @@ jobs:
       run: |
         sudo npm install -g @sentry/cli --unsafe-perm
         ./scripts/sentry-upload.mjs
-      if: matrix.build-arch == 'x64'
+      if: matrix.build-arch == 'x64' && env.HAS_SENTRY_SECRETS == 'true'
       env:
         SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -251,7 +264,7 @@ jobs:
 
     - name: Upload packages to packagecloud.io
       uses: TykTechnologies/packagecloud-action@main
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.HAS_PACKAGECLOUD_TOKEN == 'true'
       env:
         PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
       with:
@@ -260,37 +273,37 @@ jobs:
         rpmvers: 'el/9 el/8 ol/6 ol/7'
         debvers: 'ubuntu/bionic ubuntu/focal ubuntu/hirsute ubuntu/impish ubuntu/jammy ubuntu/kinetic ubuntu/noble ubuntu/oracular debian/jessie debian/stretch debian/buster debian/bullseye debian/bookworm debian/trixie debian/forky debian/duke debian/testing debian/unstable debian/sid'
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload AppImage (${{matrix.arch}})
       with:
         name: Linux AppImage (${{matrix.arch}})
         path: dist/*.AppImage
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload DEB (${{matrix.arch}})
       with:
         name: Linux DEB (${{matrix.arch}})
         path: dist/*.deb
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload RPM (${{matrix.arch}})
       with:
         name: Linux RPM (${{matrix.arch}})
         path: dist/*.rpm
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload Pacman Package (${{matrix.arch}})
       with:
         name: Linux Pacman (${{matrix.arch}})
         path: dist/*.pacman
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload Linux tarball (${{matrix.arch}})
       with:
         name: Linux tarball (${{matrix.arch}})
         path: dist/*.tar.gz
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload web tarball (amd64 only)
       with:
         name: Web tarball
@@ -312,6 +325,8 @@ jobs:
     env:
       RUST_TARGET_TRIPLE: ${{matrix.rust_triple}}
       ARCH: ${{matrix.arch}}
+      HAS_SENTRY_SECRETS: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
+      HAS_WINDOWS_SIGNING: ${{ secrets.SM_CLIENT_CERT_FILE_B64 != '' && secrets.SM_CLIENT_CERT_PASSWORD != '' && secrets.SM_PUBLISHER_NAME != '' && secrets.SM_API_KEY != '' && vars.SM_CODE_SIGNING_CERT_SHA1_HASH != '' && vars.SM_KEYPAIR_ALIAS != '' }}
 
     steps:
     - name: Checkout
@@ -321,7 +336,7 @@ jobs:
 
     - name: Code signing with Software Trust Manager
       uses: digicert/ssm-code-signing@v1.1.1
-      if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true'
       env:
         FORCE_DOWNLOAD_TOOLS: 'true'
 
@@ -341,7 +356,7 @@ jobs:
     - name: Build
       shell: powershell
       run: |
-        npm i -g yar node-gyp
+        npm i -g yarn node-gyp
         yarn --network-timeout 1000000
         yarn run build
         node scripts/prepackage-plugins.mjs
@@ -349,7 +364,7 @@ jobs:
         ARCH: ${{matrix.arch}}
 
     - name: Decode certificate
-      if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true'
       env:
         SM_CLIENT_CERT_FILE_B64: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
       run: |
@@ -359,7 +374,7 @@ jobs:
       shell: bash
 
     - name: Build and sign packages
-      if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true'
       shell: powershell
       run: |
         Get-FileHash $env:SM_CLIENT_CERT_FILE -Algorithm MD5
@@ -390,7 +405,7 @@ jobs:
 
     - name: Build packages without signing
       run: node scripts/build-windows.mjs
-      if: "! (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')))"
+      if: ${{ ! (github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true') }}
       env:
         ARCH: ${{matrix.arch}}
 
@@ -398,6 +413,7 @@ jobs:
       run: |
         npm install @sentry/cli
         node scripts/sentry-upload.mjs
+      if: env.HAS_SENTRY_SECRETS == 'true'
       env:
         SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -410,13 +426,13 @@ jobs:
         mkdir artifact-portable
         mv dist/*-portable-*.zip artifact-portable/
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload installer
       with:
         name: Windows installer (${{matrix.arch}})
         path: artifact-setup
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload portable build
       with:
         name: Windows portable build (${{matrix.arch}})
