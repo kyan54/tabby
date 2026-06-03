@@ -673,7 +673,7 @@ export class BaseTerminalTabComponent<P extends BaseTerminalProfile> extends Bas
                 if (this.config.store.terminal.rightClick === 'paste') {
                     this.paste()
                 } else if (this.config.store.terminal.rightClick === 'clipboard') {
-                    if (this.frontend?.getSelection()) {
+                    if (this.frontend?.hasUserSelection()) {
                         this.frontend.copySelection()
                         this.frontend.clearSelection()
                     } else {

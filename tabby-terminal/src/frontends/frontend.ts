@@ -71,6 +71,12 @@ export abstract class Frontend {
     abstract copySelection (): void
     abstract selectAll (): void
     abstract clearSelection (): void
+
+    // True only for selections the user made themselves (e.g. mouse drag), not transient
+    // programmatic ones like a search match - lets an ambiguous right-click paste instead of copy.
+    hasUserSelection (): boolean {
+        return !!this.getSelection()
+    }
     abstract focus (): void
     abstract write (data: string): Promise<void>
     abstract clear (): void

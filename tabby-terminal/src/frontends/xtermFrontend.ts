@@ -72,6 +72,7 @@ export class XTermFrontend extends Frontend {
     private configuredTheme: ITheme = {}
     private copyOnSelect = false
     private preventNextOnSelectionChangeEvent = false
+    private searchSelectionActive = false
     private search = new SearchAddon()
     private searchState: SearchState = { resultCount: 0 }
     private fitAddon = new FitAddon()
@@ -124,10 +125,18 @@ export class XTermFrontend extends Frontend {
         })
         this.xterm.onSelectionChange(() => {
             if (this.getSelection()) {
-                if (this.copyOnSelect && !this.preventNextOnSelectionChangeEvent) {
-                    this.copySelection()
+                if (this.preventNextOnSelectionChangeEvent) {
+                    // Selection caused by search navigation, not the user
+                    this.searchSelectionActive = true
+                } else {
+                    this.searchSelectionActive = false
+                    if (this.copyOnSelect) {
+                        this.copySelection()
+                    }
                 }
                 this.preventNextOnSelectionChangeEvent = false
+            } else {
+                this.searchSelectionActive = false
             }
         })
         this.xterm.onBell(() => {
@@ -393,7 +402,12 @@ export class XTermFrontend extends Frontend {
     }
 
     clearSelection (): void {
+        this.searchSelectionActive = false
         this.xterm.clearSelection()
+    }
+
+    hasUserSelection (): boolean {
+        return !!this.getSelection() && !this.searchSelectionActive
     }
 
     focus (): void {
@@ -558,18 +572,14 @@ export class XTermFrontend extends Frontend {
     }
 
     findNext (term: string, searchOptions?: SearchOptions): SearchState {
-        if (this.copyOnSelect) {
-            this.preventNextOnSelectionChangeEvent = true
-        }
+        this.preventNextOnSelectionChangeEvent = true
         return this.wrapSearchResult(
             this.search.findNext(term, this.getSearchOptions(searchOptions)),
         )
     }
 
     findPrevious (term: string, searchOptions?: SearchOptions): SearchState {
-        if (this.copyOnSelect) {
-            this.preventNextOnSelectionChangeEvent = true
-        }
+        this.preventNextOnSelectionChangeEvent = true
         return this.wrapSearchResult(
             this.search.findPrevious(term, this.getSearchOptions(searchOptions)),
         )
