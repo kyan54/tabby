@@ -73,6 +73,11 @@ export class XTermFrontend extends Frontend {
     private copyOnSelect = false
     private preventNextOnSelectionChangeEvent = false
     private searchSelectionActive = false
+    private selectionMouseDown = false
+    private selectionMouseUpHandler = (): void => {
+        this.selectionMouseDown = false
+    }
+
     private search = new SearchAddon()
     private searchState: SearchState = { resultCount: 0 }
     private fitAddon = new FitAddon()
@@ -124,20 +129,26 @@ export class XTermFrontend extends Frontend {
             this.title.next(title)
         })
         this.xterm.onSelectionChange(() => {
-            if (this.getSelection()) {
-                if (this.preventNextOnSelectionChangeEvent) {
-                    // Selection caused by search navigation, not the user
-                    this.searchSelectionActive = true
-                } else {
-                    this.searchSelectionActive = false
-                    if (this.copyOnSelect) {
-                        this.copySelection()
-                    }
-                }
-                this.preventNextOnSelectionChangeEvent = false
-            } else {
+            if (!this.getSelection()) {
                 this.searchSelectionActive = false
+                return
             }
+            if (this.preventNextOnSelectionChangeEvent) {
+                // Selection created by search navigation — never the user's doing
+                this.preventNextOnSelectionChangeEvent = false
+                this.searchSelectionActive = true
+            } else if (this.selectionMouseDown) {
+                // Selection created or extended by a real mouse drag
+                this.searchSelectionActive = false
+                if (this.copyOnSelect) {
+                    this.copySelection()
+                }
+            }
+            // Otherwise this is a spurious re-emit triggered by terminal output,
+            // scrolling or reflow while a selection lingers. Leave the flags alone
+            // so a search highlight can never be silently reclassified as a user
+            // selection (which is what used to leak it into the clipboard via
+            // Ctrl+C / copy-on-select / right-click after a paste redrew the view).
         })
         this.xterm.onBell(() => {
             this.bell.next()
@@ -354,6 +365,19 @@ export class XTermFrontend extends Frontend {
         host.addEventListener('mousedown', event => this.mouseEvent.next(event))
         host.addEventListener('mouseup', event => this.mouseEvent.next(event))
         host.addEventListener('mousewheel', event => this.mouseEvent.next(event as MouseEvent))
+
+        // Only a left-button drag may produce a "user" selection. Capture phase so
+        // we run before xterm's own mouse handling (which can stop propagation).
+        host.addEventListener('mousedown', event => {
+            if (event.button === 0) {
+                this.selectionMouseDown = true
+                // Any pending "the next selection comes from search" expectation is
+                // now stale — the user is about to select something themselves.
+                this.preventNextOnSelectionChangeEvent = false
+            }
+        }, { capture: true })
+        // The drag can end anywhere, so listen on the window, not just the terminal.
+        window.addEventListener('mouseup', this.selectionMouseUpHandler)
         host.addEventListener('contextmenu', event => {
             event.preventDefault()
             event.stopPropagation()
@@ -365,6 +389,7 @@ export class XTermFrontend extends Frontend {
 
     detach (_host: HTMLElement): void {
         window.removeEventListener('resize', this.resizeHandler)
+        window.removeEventListener('mouseup', this.selectionMouseUpHandler)
         this.resizeObserver?.disconnect()
         delete this.resizeObserver
     }
