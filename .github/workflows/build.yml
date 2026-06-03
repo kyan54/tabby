@@ -298,7 +298,7 @@ jobs:
         SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
     - name: Upload packages to packagecloud.io
-      uses: TykTechnologies/packagecloud-action@main
+      uses: TykTechnologies/packagecloud-action@7add92bc6a06914be404cf7fa00a6ccb302e6ac5 # main
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.HAS_PACKAGECLOUD_TOKEN == 'true'
       env:
         PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
@@ -306,7 +306,7 @@ jobs:
         repo: 'eugeny/tabby'
         dir: 'dist'
         rpmvers: 'el/9 el/8 ol/6 ol/7'
-        debvers: 'ubuntu/bionic ubuntu/focal ubuntu/hirsute ubuntu/impish ubuntu/jammy ubuntu/kinetic ubuntu/noble ubuntu/oracular debian/jessie debian/stretch debian/buster debian/bullseye debian/bookworm debian/trixie debian/forky debian/duke debian/testing debian/unstable debian/sid'
+        debvers: 'ubuntu/bionic ubuntu/focal ubuntu/hirsute ubuntu/impish ubuntu/jammy ubuntu/kinetic ubuntu/noble ubuntu/oracular debian/jessie debian/stretch debian/buster debian/bullseye debian/bookworm debian/trixie debian/forky debian/duke debian/forky debian/sid'
 
     - uses: actions/upload-artifact@v4
       name: Upload AppImage (${{matrix.arch}})
@@ -395,11 +395,13 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Code signing with Software Trust Manager
-      uses: digicert/ssm-code-signing@v1.1.1
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true'
-      env:
-        FORCE_DOWNLOAD_TOOLS: 'true'
+    - name: Add Windows SDK signtool to PATH
+      shell: powershell
+      run: |
+        $x64 = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64'
+        $arm64 = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\arm64'
+        $newPath = "$x64;$arm64;$env:PATH"
+        echo "PATH=$newPath" >> $env:GITHUB_ENV
 
     - name: Installing Node
       uses: actions/setup-node@v4.4.0
@@ -413,6 +415,16 @@ jobs:
       run: |
         npm install --global node-gyp@10.2.0
         npm prefix -g | % {npm config set node_gyp "$_\node_modules\node-gyp\bin\node-gyp.js"}
+
+    - name: Download Visual C++ Redistributable
+      shell: bash
+      run: |
+        if [ "$ARCH" = "arm64" ]; then
+          curl -sSL -o build/vc_redist.exe "https://aka.ms/vs/17/release/vc_redist.arm64.exe"
+        else
+          curl -sSL -o build/vc_redist.exe "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+        fi
+        ls -la build/vc_redist.exe
 
     - name: Build
       shell: powershell
@@ -433,6 +445,15 @@ jobs:
         echo "$SM_CLIENT_CERT_FILE_B64" | base64 --decode > $SM_CLIENT_CERT_FILE
         echo "SM_CLIENT_CERT_FILE=$SM_CLIENT_CERT_FILE" >> "$GITHUB_ENV"
       shell: bash
+
+    - name: Setup Software Trust Manager
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true'
+      uses: digicert/code-signing-software-trust-action@cb502242630f8556eb815a4f9c1e8c64d2a2d2a3 # v1.0.0
+      env:
+        SM_HOST: ${{ vars.SM_HOST }}
+        SM_API_KEY: ${{ secrets.SM_API_KEY }}
+        SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
+        SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
 
     - name: Build and sign packages
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && env.HAS_WINDOWS_SIGNING == 'true'
@@ -462,6 +483,7 @@ jobs:
         SM_HOST: ${{ vars.SM_HOST }}
         SM_CODE_SIGNING_CERT_SHA1_HASH: ${{ vars.SM_CODE_SIGNING_CERT_SHA1_HASH }}
         SM_KEYPAIR_ALIAS: ${{ vars.SM_KEYPAIR_ALIAS }}
+        SM_LOG_LEVEL: TRACE
         # DEBUG: electron-builder,electron-builder:*
 
     - name: Build packages without signing
