@@ -23,6 +23,19 @@
 This is a fork of upstream Tabby. It tracks the upstream releases and adds the fixes below on top.
 Pre-built installers for this fork are published at [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
 
+### v1.0.234-fix-v0.2
+
+Hardens the v0.1 fixes. A lingering search highlight could still be reclassified as *your*
+selection whenever a stray selection event fired — most visibly after a paste redrew the
+terminal. That made `Ctrl+C` show "Copied" instead of interrupting, and made right-click copy
+the search text into the clipboard (so right-click pasted the search content and "only worked
+once").
+
+Now a selection only counts as yours when it is produced by an actual **left-button mouse drag**.
+Selections created by search, or re-emitted by terminal output / scrolling / redraw, can never
+flip that decision. As a result `Ctrl+C`, copy-on-select and right-click (clipboard mode) all
+treat a search highlight as "not a selection" — Ctrl+C interrupts, and right-click pastes.
+
 ### v1.0.234-fix-v0.1
 
 A search highlight (the terminal selection left behind by `Ctrl+Shift+F`) is created by the
