@@ -18,6 +18,22 @@
 
 ----
 
+## Fork changes
+
+This is a fork of upstream Tabby. It tracks the upstream releases and adds the fixes below on top.
+Pre-built installers for this fork are published at [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
+
+### v1.0.234-fix
+
+* **Fix: a lingering `Ctrl+Shift+F` search selection no longer hijacks right-click paste.**
+  Previously, after searching in the terminal, switching to another app and copying text there,
+  then returning to Tabby and right-clicking would copy the stale search match (overwriting your
+  clipboard) instead of pasting. Right-click now only treats selections the user made themselves
+  (e.g. a mouse drag) as a copy source and ignores the programmatic search highlight. Explicit
+  `Ctrl+C` still copies the current search match.
+
+----
+
 ### Downloads:
 
 * [Latest release](https://github.com/Eugeny/tabby/releases/latest)
