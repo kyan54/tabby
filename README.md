@@ -23,14 +23,19 @@
 This is a fork of upstream Tabby. It tracks the upstream releases and adds the fixes below on top.
 Pre-built installers for this fork are published at [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
 
-### v1.0.234-fix
+### v1.0.234-fix-v0.1
 
-* **Fix: a lingering `Ctrl+Shift+F` search selection no longer hijacks right-click paste.**
-  Previously, after searching in the terminal, switching to another app and copying text there,
-  then returning to Tabby and right-clicking would copy the stale search match (overwriting your
-  clipboard) instead of pasting. Right-click now only treats selections the user made themselves
-  (e.g. a mouse drag) as a copy source and ignores the programmatic search highlight. Explicit
-  `Ctrl+C` still copies the current search match.
+A search highlight (the terminal selection left behind by `Ctrl+Shift+F`) is created by the
+program, not by you, so it should never sneak into the clipboard. On Windows, Tabby defaults to
+`rightClick: clipboard` and `copyOnSelect: true`, which previously let that highlight leak into
+the clipboard through several paths. This fork stops all of them:
+
+* **Right-click** no longer copies a lingering search highlight — it pastes (or shows the menu)
+  as if there were no selection. Only selections you made yourself (e.g. a mouse drag) are copied.
+* **`Ctrl+C`** with only a search highlight now sends `SIGINT` (cancels the running command)
+  instead of copying the highlighted text. A real selection still copies as before.
+* **Closing the search panel** now clears the match selection, so nothing lingers to be grabbed
+  later by copy-on-select, right-click, or `Ctrl+C`.
 
 ----
 

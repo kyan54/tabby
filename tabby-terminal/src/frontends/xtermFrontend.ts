@@ -587,6 +587,8 @@ export class XTermFrontend extends Frontend {
 
     cancelSearch (): void {
         this.search.clearDecorations()
+        // Drop the match selection so it can't later be grabbed by copyOnSelect / right-click / Ctrl+C
+        this.clearSelection()
         this.focus()
     }
 

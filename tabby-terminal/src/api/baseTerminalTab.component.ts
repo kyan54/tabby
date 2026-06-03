@@ -237,7 +237,7 @@ export class BaseTerminalTabComponent<P extends BaseTerminalProfile> extends Bas
             }
             switch (hotkey) {
                 case 'ctrl-c':
-                    if (this.frontend?.getSelection()) {
+                    if (this.frontend?.hasUserSelection()) {
                         this.frontend.copySelection()
                         this.frontend.clearSelection()
                         this.notifications.notice(this.translate.instant('Copied'))
