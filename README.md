@@ -20,8 +20,22 @@
 
 ## Fork changes
 
-This is a fork of upstream Tabby. It tracks the upstream releases and adds the fixes below on top.
+### Why this fork
+
+This is a personal fork of upstream [Tabby](https://github.com/Eugeny/tabby). I maintain it
+purely for my own day-to-day use: it follows the upstream releases and layers a few small fixes
+and build tweaks on top that suit my workflow. It is not an official build and comes with no
+support guarantees — if upstream Tabby works for you, please use that instead.
+
 Pre-built installers for this fork are published at [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
+
+### v1.0.234-fix-v0.3
+
+Signed & notarized macOS builds. The macOS `.dmg` / `.zip` artifacts produced by CI are now
+code-signed with a Developer ID certificate and notarized by Apple. This removes the
+"app is damaged / cannot verify developer" warning on macOS, so the app opens with a normal
+double-click. No application code was changed in this release. Windows and Linux artifacts are
+unaffected (Linux needs no signing; Windows signing is not configured yet).
 
 ### v1.0.234-fix-v0.2
 
