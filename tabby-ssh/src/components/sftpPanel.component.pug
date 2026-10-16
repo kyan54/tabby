@@ -39,24 +39,45 @@
 
     button.btn.btn-link.text-decoration-none((click)='close()') !{require('../../../tabby-core/src/icons/times.svg')}
 
-.sort-bar.px-3.py-2.border-bottom.d-flex.align-items-center
-    label.me-2.mb-0
-        span.me-2(translate) Sort by
-        select.form-control.form-control-sm.w-auto.d-inline-block(
-            [(ngModel)]='sort.field',
-            (ngModelChange)='changeSort()'
-        )
-            option(value='name', translate) Name
-            option(value='modified', translate) Modified
-            option(value='size', translate) Size
-    button.btn.btn-link.btn-sm.d-flex.align-items-center(
-        type='button',
-        (click)='toggleSortDirection()',
-        [attr.aria-label]='(sort.direction === "asc" ? "Ascending" : "Descending") | translate'
-    )
-        i.fas.me-1([class.fa-sort-amount-up-alt]='sort.direction === "asc"', [class.fa-sort-amount-down]='sort.direction === "desc"', aria-hidden='true')
-        span(*ngIf='sort.direction === "asc"', translate) Ascending
-        span(*ngIf='sort.direction === "desc"', translate) Descending
+.sort-bar.px-3.py-2.border-bottom
+    .d-flex.align-items-center.flex-wrap
+        button.btn.btn-link.btn-sm.me-2(type='button', (click)='openSortEditor()')
+            i.fas.fa-sort.me-1(aria-hidden='true')
+            span(translate) Sort by
+        span.me-2(*ngFor='let rule of sort; let last = last')
+            span(*ngIf='rule.field === "name"', translate) Name
+            span(*ngIf='rule.field === "modified"', translate) Modified
+            span(*ngIf='rule.field === "size"', translate) Size
+            span.ms-1 {{rule.direction === 'asc' ? '↑' : '↓'}}
+            span.ms-2(*ngIf='!last') →
+    .sort-editor(*ngIf='sortEditorOpen', (keydown.escape)='cancelSortEditor(); $event.stopPropagation()')
+        .small.text-muted.mb-2(translate) Sort rules are applied from top to bottom. Folders stay first.
+        .sort-rule.d-flex.align-items-center.mb-2(*ngFor='let rule of sortDraft; let index = index')
+            span.me-2 {{index + 1}}.
+            select.form-control.form-control-sm.me-2(
+                [ngModel]='rule.field',
+                (ngModelChange)='setSortField(index, $event)',
+                [attr.aria-label]='("Sort field" | translate) + " " + (index + 1)'
+            )
+                option(value='name', [disabled]='isSortFieldUsed("name", index)', translate) Name
+                option(value='modified', [disabled]='isSortFieldUsed("modified", index)', translate) Modified
+                option(value='size', [disabled]='isSortFieldUsed("size", index)', translate) Size
+            select.form-control.form-control-sm.me-2(
+                [(ngModel)]='rule.direction',
+                [attr.aria-label]='("Sort direction" | translate) + " " + (index + 1)'
+            )
+                option(value='asc', translate) Ascending
+                option(value='desc', translate) Descending
+            button.btn.btn-link.btn-sm(type='button', (click)='moveSortRule(index, -1)', [disabled]='index === 0', [attr.aria-label]='"Move up" | translate', [title]='"Move up" | translate')
+                i.fas.fa-arrow-up(aria-hidden='true')
+            button.btn.btn-link.btn-sm(type='button', (click)='moveSortRule(index, 1)', [disabled]='index === sortDraft.length - 1', [attr.aria-label]='"Move down" | translate', [title]='"Move down" | translate')
+                i.fas.fa-arrow-down(aria-hidden='true')
+            button.btn.btn-link.btn-sm(type='button', (click)='removeSortRule(index)', [disabled]='sortDraft.length === 1', [attr.aria-label]='"Remove sort rule" | translate', [title]='"Remove sort rule" | translate')
+                i.fas.fa-times(aria-hidden='true')
+        .d-flex.align-items-center.flex-wrap
+            button.btn.btn-link.btn-sm.me-auto(type='button', (click)='addSortRule()', [disabled]='sortDraft.length === sortFields.length', translate) Add sort field
+            button.btn.btn-secondary.btn-sm.me-2(type='button', (click)='cancelSortEditor()', translate) Cancel
+            button.btn.btn-primary.btn-sm(type='button', (click)='applySort()', translate) Apply
 
 .filter-bar.px-3.py-2.border-bottom(*ngIf='showFilter')
     .input-group

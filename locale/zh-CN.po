@@ -2599,3 +2599,35 @@ msgstr "升序"
 #: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Descending"
 msgstr "降序"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort rules are applied from top to bottom. Folders stay first."
+msgstr "从上到下依次排序，文件夹始终优先。"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort field"
+msgstr "排序字段"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort direction"
+msgstr "排序方向"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Move up"
+msgstr "上移"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Move down"
+msgstr "下移"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Remove sort rule"
+msgstr "删除排序字段"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Add sort field"
+msgstr "添加排序字段"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Apply"
+msgstr "应用"

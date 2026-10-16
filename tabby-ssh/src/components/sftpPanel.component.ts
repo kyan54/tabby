@@ -7,7 +7,7 @@ import { SSHSession } from '../session/ssh'
 import { SFTPContextMenuItemProvider } from '../api'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { SFTPCreateDirectoryModalComponent } from './sftpCreateDirectoryModal.component'
-import { normalizeSFTPSort, sortSFTPFiles, SFTPSortPreferences } from '../sftpSorting'
+import { normalizeSFTPSort, sortSFTPFiles, SFTPSortRule, SFTPSortField, SFTP_SORT_FIELDS } from '../sftpSorting'
 
 interface PathSegment {
     name: string
@@ -32,7 +32,10 @@ export class SFTPPanelComponent {
     editingPath: string|null = null
     showFilter = false
     filterText = ''
-    sort: SFTPSortPreferences
+    sort: SFTPSortRule[]
+    sortDraft: SFTPSortRule[] = []
+    sortEditorOpen = false
+    sortFields = SFTP_SORT_FIELDS
 
     constructor (
         private ngbModal: NgbModal,
@@ -92,16 +95,62 @@ export class SFTPPanelComponent {
         this.updateSortedList()
     }
 
-    changeSort (): void {
-        this.config.store.ssh.sftpSort.field = this.sort.field
-        this.config.store.ssh.sftpSort.direction = this.sort.direction
-        this.config.save()
-        this.updateSortedList()
+    openSortEditor (): void {
+        if (this.sortEditorOpen) {
+            return
+        }
+        this.sortDraft = this.sort.map(rule => ({ ...rule }))
+        this.sortEditorOpen = true
     }
 
-    toggleSortDirection (): void {
-        this.sort.direction = this.sort.direction === 'asc' ? 'desc' : 'asc'
-        this.changeSort()
+    cancelSortEditor (): void {
+        this.sortEditorOpen = false
+        this.sortDraft = []
+    }
+
+    isSortFieldUsed (field: SFTPSortField, index: number): boolean {
+        return this.sortDraft.some((rule, otherIndex) => otherIndex !== index && rule.field === field)
+    }
+
+    setSortField (index: number, field: SFTPSortField): void {
+        if (this.sortDraft[index] && this.sortFields.includes(field) && !this.isSortFieldUsed(field, index)) {
+            this.sortDraft[index].field = field
+        }
+    }
+
+    addSortRule (): void {
+        const field = this.sortFields.find(x => !this.sortDraft.some(rule => rule.field === x))
+        if (field) {
+            this.sortDraft.push({ field, direction: 'asc' })
+        }
+    }
+
+    removeSortRule (index: number): void {
+        if (this.sortDraft.length > 1 && index >= 0 && index < this.sortDraft.length) {
+            this.sortDraft.splice(index, 1)
+        }
+    }
+
+    moveSortRule (index: number, offset: number): void {
+        const target = index + offset
+        if (index >= 0 && target >= 0 && index < this.sortDraft.length && target < this.sortDraft.length) {
+            const [rule] = this.sortDraft.splice(index, 1)
+            this.sortDraft.splice(target, 0, rule)
+        }
+    }
+
+    applySort (): void {
+        if (!this.sortEditorOpen) {
+            return
+        }
+        this.sort = normalizeSFTPSort(this.sortDraft)
+        this.config.store.ssh.sftpSort.rules = this.sort.map(rule => ({ ...rule }))
+        // Retain the primary rule for older versions that only understand one field.
+        this.config.store.ssh.sftpSort.field = this.sort[0].field
+        this.config.store.ssh.sftpSort.direction = this.sort[0].direction
+        this.config.save()
+        this.cancelSortEditor()
+        this.updateSortedList()
     }
 
     getFileType (fileExtension: string): string {

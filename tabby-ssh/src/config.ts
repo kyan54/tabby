@@ -7,6 +7,7 @@ export class SSHConfigProvider extends ConfigProvider {
             warnOnClose: false,
             winSCPPath: null,
             sftpSort: {
+                rules: null,
                 field: 'name',
                 direction: 'asc',
             },
