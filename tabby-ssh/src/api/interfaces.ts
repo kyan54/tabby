@@ -27,7 +27,7 @@ export interface SSHProfileOptions extends LoginScriptsOptions {
     skipBanner: boolean
     jumpHost: string | null
     agentForward: boolean
-    warnOnClose: boolean
+    warnOnClose: boolean | null
     algorithms: Record<SSHAlgorithmType, string[]>
     proxyCommand: string | null
     forwardedPorts: ForwardedPortConfig[]
@@ -37,6 +37,9 @@ export interface SSHProfileOptions extends LoginScriptsOptions {
     httpProxyPort: number | null
     reuseSession: boolean
     input: InputProcessingOptions,
+    cwd: string | null
+    rememberCwd: boolean
+    term?: string
 }
 
 export enum PortForwardType {
