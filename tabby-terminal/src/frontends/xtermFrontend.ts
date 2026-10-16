@@ -111,6 +111,7 @@ export class XTermFrontend extends Frontend {
             this.preventNextOnSelectionChangeEvent = false
         }
     }
+
     private selectionMouseUpHandler = (): void => {
         this.selectionMouseDown = false
     }
