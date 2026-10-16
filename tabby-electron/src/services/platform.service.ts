@@ -10,6 +10,7 @@ import { ElectronService } from '../services/electron.service'
 import { ElectronHostWindow } from './hostWindow.service'
 import { ShellIntegrationService } from './shellIntegration.service'
 import { ElectronHostAppService } from './hostApp.service'
+import { findCyberduckApplication } from '../cyberduck'
 import { configPath } from '../../../app/lib/config'
 const fontManager = require('fontmanager-redux') // eslint-disable-line
 
@@ -112,6 +113,13 @@ export class ElectronPlatformService extends PlatformService {
             return detectedPath
         }
         return null
+    }
+
+    async getCyberduckPath (): Promise<string|null> {
+        if (this.hostApp.platform !== Platform.macOS) {
+            return null
+        }
+        return findCyberduckApplication(os.homedir(), async (program, args) => (await execFile(program, args, { timeout: 5000 }))[0])
     }
 
     async exec (app: string, argv: string[]): Promise<void> {

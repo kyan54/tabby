@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core'
 import { BaseTabComponent, TabContextMenuItemProvider, HostAppService, Platform, MenuItemOptions, TranslateService } from 'tabby-core'
 import { SSHTabComponent } from './components/sshTab.component'
+import { CyberduckService } from './services/cyberduck.service'
 import { SSHService } from './services/ssh.service'
 
 
@@ -13,6 +14,7 @@ export class SFTPContextMenu extends TabContextMenuItemProvider {
         private hostApp: HostAppService,
         private ssh: SSHService,
         private translate: TranslateService,
+        private cyberduck: CyberduckService,
     ) {
         super()
     }
@@ -21,7 +23,7 @@ export class SFTPContextMenu extends TabContextMenuItemProvider {
         if (!(tab instanceof SSHTabComponent)) {
             return []
         }
-        const items = [{
+        const items: MenuItemOptions[] = [{
             label: this.translate.instant('Open SFTP panel'),
             click: () => {
                 tab.openSFTP()
@@ -32,6 +34,21 @@ export class SFTPContextMenu extends TabContextMenuItemProvider {
                 label: this.translate.instant('Launch WinSCP'),
                 click: (): void => {
                     this.ssh.launchWinSCP(tab.sshSession!)
+                },
+            })
+        }
+        if (this.hostApp.platform === Platform.macOS) {
+            items.push({
+                label: this.translate.instant('Open in Cyberduck'),
+                enabled: !!tab.sshSession?.open,
+                click: async () => {
+                    const session = tab.sshSession
+                    const shell = tab.session
+                    if (session) {
+                        await this.cyberduck.launch(tab.profile, session.authUsername,
+                            () => shell?.getWorkingDirectory() ?? Promise.resolve(null),
+                            () => tab.sshSession === session && tab.session === shell && session.open)
+                    }
                 },
             })
         }
