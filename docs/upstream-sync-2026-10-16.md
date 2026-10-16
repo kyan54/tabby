@@ -7,6 +7,7 @@
 - Fork baseline: `83fa2de802147e2eb8809aaf69e06d81feff3e20`.
 - Shared ancestor: `ecf2a487bcfdbdd43a324dc4b168e522b0d65130`.
 - Upstream target: `467ce8ebfa467fb88cf6d154c9a5891e3d3647f0` (latest official release: [v1.0.238](https://github.com/Eugeny/tabby/releases/tag/v1.0.238)).
+- Release distinction: v1.0.238 points to `54869e108aaa336fdd01bc4de5b160fd8feccf7b`. The synchronized official master is one commit newer (`467ce8eb`, xterm 6); that change was not yet in the release tag.
 - Before merging: upstream had 132 commits absent from the fork; the fork had 14 commits absent from upstream.
 - Integration branch: `sync/upstream-2026-10-16`. Original checkout `/Users/hujinwu/dev/tabby` was clean and was left untouched; integration uses a separate clone.
 - No project AGENTS.md or project skill files were found in the checked repository.
@@ -38,7 +39,9 @@ Three text conflicts were resolved by retaining both behaviors: build workflow, 
 - `yarn run test:ssh-term`: 14 tests passed.
 - `yarn run test:unit`: 11 tests passed.
 - `yarn run build:typings`: all 13 built-in plugins checked successfully.
-- Full lint and remote CI are verified separately against the final integration commit; see its GitHub checks.
+- Full lint passed locally. Full source build passed all 17 webpack configurations (app, built-in plugins, web, demo), with warnings and no errors.
+- Additional smoke tests executed the actual transpiled fork code with mocked services/host: six password cases each for direct/jump-host WinSCP URIs; search/redraw exclusion, mouse copying, search cancellation, and listener teardown all passed.
+- Integration source commit `9b2f3072` passed GitHub Package-Build (including tests, typings, lint) and Docs. Its existing workflow skipped native platform packaging jobs on this non-tag push because Create-Release was skipped. Native packages were not validated or published. This final follow-up changes this report only; see the final commit's checks for remote status.
 - Lockfiles retained; dependency installation used frozen lockfiles. Local installation skipped lifecycle scripts; native packaging and platform jobs run in CI.
 - Interactive application, real SSH server, and physical Windows/macOS behavior were not manually exercised.
 
