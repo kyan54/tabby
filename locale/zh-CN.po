@@ -2579,3 +2579,23 @@ msgstr "缩小"
 msgctxt "[Dynamic] port forwarding"
 msgid "id.port-forwarding.dynamic"
 msgstr "动态端口转发"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort by"
+msgstr "排序方式"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Modified"
+msgstr "修改时间"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Size"
+msgstr "大小"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Ascending"
+msgstr "升序"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Descending"
+msgstr "降序"

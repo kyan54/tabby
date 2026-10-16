@@ -9,8 +9,13 @@
         flex: none;
     }
 
-    > .filter-bar {
+    > .filter-bar, > .sort-bar {
         flex: none;
+    }
+
+    > .sort-bar {
+        flex-wrap: wrap;
+        gap: 4px;
     }
 
     > .body {

@@ -39,6 +39,25 @@
 
     button.btn.btn-link.text-decoration-none((click)='close()') !{require('../../../tabby-core/src/icons/times.svg')}
 
+.sort-bar.px-3.py-2.border-bottom.d-flex.align-items-center
+    label.me-2.mb-0
+        span.me-2(translate) Sort by
+        select.form-control.form-control-sm.w-auto.d-inline-block(
+            [(ngModel)]='sort.field',
+            (ngModelChange)='changeSort()'
+        )
+            option(value='name', translate) Name
+            option(value='modified', translate) Modified
+            option(value='size', translate) Size
+    button.btn.btn-link.btn-sm.d-flex.align-items-center(
+        type='button',
+        (click)='toggleSortDirection()',
+        [attr.aria-label]='(sort.direction === "asc" ? "Ascending" : "Descending") | translate'
+    )
+        i.fas.me-1([class.fa-sort-amount-up-alt]='sort.direction === "asc"', [class.fa-sort-amount-down]='sort.direction === "desc"', aria-hidden='true')
+        span(*ngIf='sort.direction === "asc"', translate) Ascending
+        span(*ngIf='sort.direction === "desc"', translate) Descending
+
 .filter-bar.px-3.py-2.border-bottom(*ngIf='showFilter')
     .input-group
         input.form-control(

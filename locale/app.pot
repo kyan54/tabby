@@ -1229,3 +1229,23 @@ msgstr ""
 #: tabby-terminal/src/hotkeys.ts:58
 msgid "Zoom out"
 msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort by"
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Modified"
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Size"
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Ascending"
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Descending"
+msgstr ""
