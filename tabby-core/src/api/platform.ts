@@ -232,6 +232,10 @@ export abstract class PlatformService {
         throw new Error('Not implemented')
     }
 
+    async getCyberduckPath (): Promise<string|null> {
+        return null
+    }
+
     async exec (app: string, argv: string[]): Promise<void> {
         throw new Error('Not implemented')
     }
