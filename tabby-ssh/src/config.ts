@@ -6,6 +6,11 @@ export class SSHConfigProvider extends ConfigProvider {
         ssh: {
             warnOnClose: false,
             winSCPPath: null,
+            sftpSort: {
+                rules: null,
+                field: 'name',
+                direction: 'asc',
+            },
             agentType: 'auto',
             agentPath: null,
             x11Display: null,

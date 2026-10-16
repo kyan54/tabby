@@ -1,12 +1,13 @@
 import * as C from 'constants'
 import { posix as path } from 'path'
 import { Component, Input, Output, EventEmitter, Inject, Optional } from '@angular/core'
-import { FileUpload, DirectoryUpload, DirectoryDownload, MenuItemOptions, NotificationsService, PlatformService } from 'tabby-core'
+import { ConfigService, FileUpload, DirectoryUpload, DirectoryDownload, MenuItemOptions, NotificationsService, PlatformService } from 'tabby-core'
 import { SFTPSession, SFTPFile } from '../session/sftp'
 import { SSHSession } from '../session/ssh'
 import { SFTPContextMenuItemProvider } from '../api'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { SFTPCreateDirectoryModalComponent } from './sftpCreateDirectoryModal.component'
+import { normalizeSFTPSort, sortSFTPFiles, SFTPSortRule, SFTPSortField, SFTP_SORT_FIELDS } from '../sftpSorting'
 
 interface PathSegment {
     name: string
@@ -31,14 +32,20 @@ export class SFTPPanelComponent {
     editingPath: string|null = null
     showFilter = false
     filterText = ''
+    sort: SFTPSortRule[]
+    sortDraft: SFTPSortRule[] = []
+    sortEditorOpen = false
+    sortFields = SFTP_SORT_FIELDS
 
     constructor (
         private ngbModal: NgbModal,
         private notifications: NotificationsService,
         public platform: PlatformService,
+        private config: ConfigService,
         @Optional() @Inject(SFTPContextMenuItemProvider) protected contextMenuProviders: SFTPContextMenuItemProvider[],
     ) {
         this.contextMenuProviders.sort((a, b) => a.weight - b.weight)
+        this.sort = normalizeSFTPSort(this.config.store.ssh.sftpSort)
     }
 
     async ngOnInit (): Promise<void> {
@@ -85,12 +92,65 @@ export class SFTPPanelComponent {
             return
         }
 
-        const dirKey = a => a.isDirectory ? 1 : 0
-        this.fileList.sort((a, b) =>
-            dirKey(b) - dirKey(a) ||
-            a.name.localeCompare(b.name))
+        this.updateSortedList()
+    }
 
-        this.updateFilteredList()
+    openSortEditor (): void {
+        if (this.sortEditorOpen) {
+            return
+        }
+        this.sortDraft = this.sort.map(rule => ({ ...rule }))
+        this.sortEditorOpen = true
+    }
+
+    cancelSortEditor (): void {
+        this.sortEditorOpen = false
+        this.sortDraft = []
+    }
+
+    isSortFieldUsed (field: SFTPSortField, index: number): boolean {
+        return this.sortDraft.some((rule, otherIndex) => otherIndex !== index && rule.field === field)
+    }
+
+    setSortField (index: number, field: SFTPSortField): void {
+        if (this.sortDraft[index] && this.sortFields.includes(field) && !this.isSortFieldUsed(field, index)) {
+            this.sortDraft[index].field = field
+        }
+    }
+
+    addSortRule (): void {
+        const field = this.sortFields.find(x => !this.sortDraft.some(rule => rule.field === x))
+        if (field) {
+            this.sortDraft.push({ field, direction: 'asc' })
+        }
+    }
+
+    removeSortRule (index: number): void {
+        if (this.sortDraft.length > 1 && index >= 0 && index < this.sortDraft.length) {
+            this.sortDraft.splice(index, 1)
+        }
+    }
+
+    moveSortRule (index: number, offset: number): void {
+        const target = index + offset
+        if (index >= 0 && target >= 0 && index < this.sortDraft.length && target < this.sortDraft.length) {
+            const [rule] = this.sortDraft.splice(index, 1)
+            this.sortDraft.splice(target, 0, rule)
+        }
+    }
+
+    applySort (): void {
+        if (!this.sortEditorOpen) {
+            return
+        }
+        this.sort = normalizeSFTPSort(this.sortDraft)
+        this.config.store.ssh.sftpSort.rules = this.sort.map(rule => ({ ...rule }))
+        // Retain the primary rule for older versions that only understand one field.
+        this.config.store.ssh.sftpSort.field = this.sort[0].field
+        this.config.store.ssh.sftpSort.direction = this.sort[0].direction
+        this.config.save()
+        this.cancelSortEditor()
+        this.updateSortedList()
     }
 
     getFileType (fileExtension: string): string {
@@ -375,6 +435,13 @@ export class SFTPPanelComponent {
     }
 
     onFilterChange (): void {
+        this.updateFilteredList()
+    }
+
+    private updateSortedList (): void {
+        if (this.fileList) {
+            this.fileList = sortSFTPFiles(this.fileList, this.sort)
+        }
         this.updateFilteredList()
     }
 
