@@ -3,11 +3,11 @@ name: macOS arm64 artifacts
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, release/cyberduck-macos-arm64-20261016]
     paths: [.github/workflows/macos-arm64.yml]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: macos-arm64-artifacts-${{ github.ref }}
@@ -20,7 +20,8 @@ jobs:
     env:
       ARCH: arm64
       RUST_TARGET_TRIPLE: aarch64-apple-darwin
-      REV: ${{ github.run_number }}
+      REV: ${{ github.run_id }}
+      PUBLISH_RELEASE: ${{ github.ref == 'refs/heads/release/cyberduck-macos-arm64-20261016' }}
       HAS_MAC_SIGNING: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' }}
       HAS_MAC_NOTARIZATION: ${{ secrets.APPLE_TEAM_ID != '' && secrets.APPSTORE_USERNAME != '' && secrets.APPSTORE_PASSWORD != '' }}
     steps:
@@ -30,6 +31,12 @@ jobs:
       - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
+      - name: Require existing signing and notarization for a release
+        if: env.PUBLISH_RELEASE == 'true'
+        run: |
+          test "$HAS_MAC_SIGNING" = true
+          test "$HAS_MAC_NOTARIZATION" = true
+          git merge-base --is-ancestor f6d0bfe07100d061d6cdbc7e85e94faf2ee50a1e HEAD
       - name: Verify Apple Silicon runner
         run: |
           test "$(uname -m)" = arm64
@@ -76,6 +83,7 @@ jobs:
           codesign -dv --verbose=2 "$APP" > dist/SIGNATURE_INFO.txt 2>&1 || true
           if [[ "$HAS_MAC_SIGNING" == true && "$HAS_MAC_NOTARIZATION" == true ]]; then
             xcrun stapler validate "$APP" >> dist/SIGNATURE_INFO.txt 2>&1
+            spctl --assess --type execute --verbose=2 "$APP" >> dist/SIGNATURE_INFO.txt 2>&1
           fi
           shasum -a 256 dist/*.dmg | sed 's|dist/||' > dist/SHA256SUMS-dmg.txt
           shasum -a 256 dist/*.zip | sed 's|dist/||' > dist/SHA256SUMS-zip.txt
@@ -85,10 +93,13 @@ jobs:
           app = root / 'mac-arm64/Tabby.app'
           with (app / 'Contents/Info.plist').open('rb') as f:
               info = plistlib.load(f)
+          ssh_bundle = app / 'Contents/Resources/builtin-plugins/tabby-ssh/dist/index.js'
+          assert 'Open in Cyberduck' in ssh_bundle.read_text(), 'Packaged SSH plugin is missing Cyberduck'
           manifest = {
               'commit': os.environ['GITHUB_SHA'],
               'run_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
               'architecture': 'arm64',
+              'cyberduck_feature_commit': 'f6d0bfe07100d061d6cdbc7e85e94faf2ee50a1e',
               'version': info['CFBundleShortVersionString'],
               'developer_id_signing_requested': os.environ['HAS_MAC_SIGNING'] == 'true',
               'notarization_requested': os.environ['HAS_MAC_SIGNING'] == 'true' and os.environ['HAS_MAC_NOTARIZATION'] == 'true',
@@ -123,3 +134,44 @@ jobs:
             dist/SHA256SUMS-zip.txt
             dist/BUILD_INFO.json
             dist/SIGNATURE_INFO.txt
+
+      - name: Publish verified Cyberduck Apple Silicon prerelease
+        if: env.PUBLISH_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 -c 'import json; print(json.load(open("dist/BUILD_INFO.json"))["version"])')
+          TAG="v${VERSION}-macos-arm64-cyberduck"
+          cat dist/SHA256SUMS-dmg.txt dist/SHA256SUMS-zip.txt > dist/SHA256SUMS.txt
+          export VERSION TAG
+          python3 - <<'PY'
+          import os, pathlib
+          notes = f"""Tabby Cyberduck integration for macOS Apple Silicon
+
+          Version: {os.environ['VERSION']}
+          Source commit: {os.environ['GITHUB_SHA']}
+          Includes Cyberduck feature commit: f6d0bfe07100d061d6cdbc7e85e94faf2ee50a1e (PR #2)
+          Build: https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}
+
+          Verification: arm64 executable, Developer ID signature, Apple notarization ticket, Gatekeeper assessment, DMG and ZIP integrity, packaged Cyberduck code, and SHA256 checks all passed. See BUILD_INFO.json, SIGNATURE_INFO.txt, and SHA256SUMS.txt.
+
+          Usage: install the DMG, open your SSH connection in Tabby, then right-click its tab and select “用 Cyberduck 打开” / “Open in Cyberduck”. Cyberduck authenticates independently; no passwords or private keys are exported. If the shell has not reported cwd, cancel is the default and server-only opening requires confirmation. Tabby jump hosts and proxies cannot be reused and are blocked with an explanation.
+
+          Real-server authentication and directory navigation remain for the user's own testing. This is a fork prerelease, not an upstream Tabby release.
+          """
+          pathlib.Path('dist/RELEASE_NOTES.md').write_text(notes)
+          PY
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --prerelease \
+            --title "Tabby ${VERSION} — Cyberduck · macOS arm64" \
+            --notes-file dist/RELEASE_NOTES.md \
+            dist/*.dmg dist/*.zip dist/BUILD_INFO.json dist/SIGNATURE_INFO.txt dist/SHA256SUMS.txt
+          CHECK_DIR="$RUNNER_TEMP/tabby-cyberduck-release-check"
+          mkdir -p "$CHECK_DIR"
+          gh release download "$TAG" --pattern '*.dmg' --pattern '*.zip' --dir "$CHECK_DIR"
+          (cd "$CHECK_DIR" && shasum -a 256 -c "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt")
+          gh release edit "$TAG" --draft=false --prerelease --latest=false
+          gh release view "$TAG" --json url,tagName,assets,isDraft,isPrerelease
+          echo "### Download" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
