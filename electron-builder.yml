@@ -59,6 +59,9 @@ nsis:
   allowToChangeInstallationDirectory: true
   shortcutName: Tabby Terminal
 mac:
+  extraResources:
+  - from: native/cyberduck-keychain/build/Release/cyberduck_keychain.node
+    to: cyberduck-keychain/cyberduck_keychain.node
   category: public.app-category.utilities
   icon: "./build/mac/icon.icns"
   artifactName: tabby-${version}-macos-${env.ARCH}.${ext}

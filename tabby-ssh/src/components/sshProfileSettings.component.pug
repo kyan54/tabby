@@ -181,6 +181,30 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     i.fas.fa-trash-alt
                     span(translate) Forget
 
+            .mb-3(*ngIf='hostApp.platform === Platform.macOS')
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        id='cyberduckPasswordSharing',
+                        [ngModel]='profile.options.cyberduckPasswordSharing',
+                        (ngModelChange)='setCyberduckPasswordSharing($event)',
+                        [disabled]='!canShareCyberduckPassword',
+                        aria-describedby='cyberduckPasswordSharingDescription'
+                    )
+                    label.form-check-label(for='cyberduckPasswordSharing', translate) Share this profile's SSH password with Cyberduck
+                .text-muted.mt-2#cyberduckPasswordSharingDescription
+                    p.mb-1(translate) After a successful password login, Tabby creates or updates an additional encrypted Internet Password in macOS Keychain that the official Cyberduck app can access. macOS may ask for permission locally.
+                    p.mb-1(translate) Save this setting, then fully reconnect. Only ordinary SSH password authentication is shared; private keys, passphrases and keyboard-interactive/MFA responses are excluded. Do not enable for accounts that use one-time values in the password prompt.
+                    p.mb-1(translate) Turning this off stops future updates. It does not remove the shared password. Use Revoke shared password to remove the copy created by Tabby.
+                    p.mb-1(*ngIf='!canShareCyberduckPassword', translate) Save this as an individual profile before enabling password sharing.
+                button.btn.btn-outline-danger.mt-2(
+                    *ngIf='canShareCyberduckPassword',
+                    [disabled]='revokingCyberduckPassword',
+                    (click)='revokeCyberduckPassword()',
+                    translate
+                ) Revoke shared password
+                .text-muted.mt-2(*ngIf='canShareCyberduckPassword', translate) Revoking here uses the configured host, port and username. If you entered a different username when connecting, use that username here to revoke its shared password.
+
             .mb-3(*ngIf='!profile.options.auth || profile.options.auth === "publicKey"')
                 label(translate) Private keys
                 .list-group.mb-2

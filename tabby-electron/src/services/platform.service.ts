@@ -1,16 +1,18 @@
 import * as path from 'path'
+import { createRequire } from 'module'
 import * as fs from 'fs/promises'
 import * as fsSync from 'fs'
 import * as os from 'os'
 import promiseIpc, { RendererProcessType } from 'electron-promise-ipc'
 import { execFile } from 'mz/child_process'
 import { Injectable, NgZone } from '@angular/core'
-import { PlatformService, ClipboardContent, Platform, MenuItemOptions, MessageBoxOptions, MessageBoxResult, DirectoryUpload, FileUpload, FileDownload, DirectoryDownload, FileUploadOptions, wrapPromise, TranslateService, FileTransfer, PlatformTheme } from 'tabby-core'
+import { PlatformService, CyberduckPasswordStatus, CyberduckPasswordTarget, ClipboardContent, Platform, MenuItemOptions, MessageBoxOptions, MessageBoxResult, DirectoryUpload, FileUpload, FileDownload, DirectoryDownload, FileUploadOptions, wrapPromise, TranslateService, FileTransfer, PlatformTheme } from 'tabby-core'
 import { ElectronService } from '../services/electron.service'
 import { ElectronHostWindow } from './hostWindow.service'
 import { ShellIntegrationService } from './shellIntegration.service'
 import { ElectronHostAppService } from './hostApp.service'
 import { findCyberduckApplication } from '../cyberduck'
+import { CyberduckKeychain } from '../cyberduckKeychain'
 import { configPath } from '../../../app/lib/config'
 const fontManager = require('fontmanager-redux') // eslint-disable-line
 
@@ -113,6 +115,24 @@ export class ElectronPlatformService extends PlatformService {
             return detectedPath
         }
         return null
+    }
+
+    private cyberduckKeychain = new CyberduckKeychain(process.platform, () => {
+        const filename = path.join(process.resourcesPath, 'cyberduck-keychain', 'cyberduck_keychain.node')
+        // A fixed packaged path; never search PATH, cwd, or a user-configured helper.
+        return createRequire(filename)(filename)
+    })
+
+    async validateCyberduckApplication (appPath: string): Promise<boolean> {
+        return this.cyberduckKeychain.validateTarget(appPath)
+    }
+
+    async shareCyberduckPassword (target: CyberduckPasswordTarget, password: Buffer, appPath: string): Promise<CyberduckPasswordStatus> {
+        return this.cyberduckKeychain.write(target, password, appPath)
+    }
+
+    async revokeCyberduckPassword (target: CyberduckPasswordTarget): Promise<CyberduckPasswordStatus> {
+        return this.cyberduckKeychain.revoke(target)
     }
 
     async getCyberduckPath (): Promise<string|null> {

@@ -97,6 +97,7 @@
     "start:prod": "electron app --debug",
     "prod": "cross-env TABBY_DEV=1 electron app",
     "docs": "node scripts/build-docs.mjs",
+    "test:cyberduck-keychain": "node --test native/cyberduck-keychain/test/*.test.mjs",
     "test:ssh-term": "node --experimental-strip-types --test tabby-ssh/test/*.test.ts",
     "test:unit": "node --import ./scripts/test-register.mjs --test \"tabby-{terminal,electron}/test/*.test.ts\"",
     "lint": "eslint --ext ts */src */lib",
