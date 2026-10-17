@@ -1,5 +1,10 @@
 import { isIP } from 'net'
 
+/** Only an unset override inherits. Explicit false and malformed values never do. */
+export function resolveCyberduckSharing (override: unknown, globalDefault: unknown): boolean {
+    return override === true || (override == null && globalDefault === true)
+}
+
 export interface CyberduckTarget {
     host: string
     port?: number

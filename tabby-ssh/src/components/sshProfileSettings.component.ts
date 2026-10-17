@@ -41,9 +41,19 @@ export class SSHProfileSettingsComponent implements ProfileSettingsComponent<SSH
     ) { }
 
     async ngOnInit () {
-        // New/duplicated profiles and group/global defaults must not inherit consent.
+        // This consent override never inherits group/provider defaults. Keeping
+        // its proxy default null also prevents cleanup from pruning an explicit
+        // false when a legacy group happens to contain false.
+        const optionsProxy = this.profile.options as any
+        if (optionsProxy.__getDefault && optionsProxy.__setDefaults) {
+            const defaults = Object.fromEntries(Object.keys(optionsProxy)
+                .filter(key => !key.startsWith('__'))
+                .map(key => [key, optionsProxy.__getDefault(key)]))
+            optionsProxy.__setDefaults({ ...defaults, cyberduckPasswordSharing: null })
+        }
+        // New/duplicated profiles follow only the separately confirmed global default.
         if (!this.canShareCyberduckPassword) {
-            this.profile.options.cyberduckPasswordSharing = false
+            this.profile.options.cyberduckPasswordSharing = null
         }
         this.jumpHosts = (await this.profilesService.getProfiles({ includeBuiltin: false })).filter(x => x.type === 'ssh' && x !== this.profile)
         this.jumpHosts.sort(firstBy(x => this.getJumpHostLabel(x)))
@@ -124,7 +134,7 @@ export class SSHProfileSettingsComponent implements ProfileSettingsComponent<SSH
         return !!this.profile.id?.startsWith('ssh:custom:') && !this.profile.isTemplate && !this.profile.isBuiltin
     }
 
-    setCyberduckPasswordSharing (enabled: boolean) {
+    setCyberduckPasswordSharing (enabled: boolean|null) {
         if (this.hostApp.platform !== Platform.macOS || !this.canShareCyberduckPassword) {
             return
         }

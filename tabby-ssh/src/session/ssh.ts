@@ -12,6 +12,7 @@ import { Subject, Observable } from 'rxjs'
 import { HostKeyPromptModalComponent } from '../components/hostKeyPromptModal.component'
 import { PasswordStorageService } from '../services/passwordStorage.service'
 import { CyberduckService } from '../services/cyberduck.service'
+import { resolveCyberduckSharing } from '../cyberduck'
 import { SSHKnownHostsService } from '../services/sshKnownHosts.service'
 import { SFTPSession } from './sftp'
 import { SSHAlgorithmType, SSHProfile, AutoPrivateKeyLocator, PortForwardType } from '../api'
@@ -656,7 +657,10 @@ export class SSHSession {
     }
 
     private shareAuthenticatedPassword (password: string): void {
-        if (this.hostApp.platform !== Platform.macOS || this.profile.options.cyberduckPasswordSharing !== true || !this.authUsername) {
+        const saved = this.config.store?.profiles?.find(x => x.id === this.profile.id)
+        const override = saved ? saved.options?.cyberduckPasswordSharing : this.profile.options.cyberduckPasswordSharing
+        if (this.hostApp.platform !== Platform.macOS || !this.authUsername ||
+            !resolveCyberduckSharing(override, this.config.store?.ssh?.cyberduckPasswordSharingDefault)) {
             return
         }
         try {

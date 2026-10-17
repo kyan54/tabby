@@ -19,8 +19,8 @@ export interface SSHProfileOptions extends LoginScriptsOptions {
     user: string
     auth: null|'password'|'publicKey'|'agent'|'keyboardInteractive'
     password: string | null
-    /** Explicit opt-in to share successful ordinary SSH passwords with Cyberduck on macOS. */
-    cyberduckPasswordSharing?: boolean
+    /** Null/unset follows the explicitly enabled global default; false always opts out. */
+    cyberduckPasswordSharing?: boolean|null
     privateKeys: string[]
     keepaliveInterval: number
     keepaliveCountMax: number

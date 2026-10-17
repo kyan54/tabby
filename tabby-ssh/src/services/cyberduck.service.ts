@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core'
-import { ConfigService, CyberduckPasswordTarget, HostAppService, NotificationsService, Platform, PlatformService, ProfilesService, TranslateService } from 'tabby-core'
+import { ConfigService, CyberduckPasswordTarget, HostAppService, NotificationsService, PartialProfile, Platform, PlatformService, ProfilesService, TranslateService } from 'tabby-core'
 import type { SSHProfile } from '../api'
-import { buildCyberduckURL, hasCyberduckRoutingRestriction } from '../cyberduck'
+import { buildCyberduckURL, hasCyberduckRoutingRestriction, resolveCyberduckSharing } from '../cyberduck'
 
 @Injectable({ providedIn: 'root' })
 export class CyberduckService {
@@ -10,12 +10,56 @@ export class CyberduckService {
     private blockedProfiles = new Set<string>()
     private generations = new Map<string, number>()
 
-    setSharingEnabled (profile: SSHProfile, enabled: boolean): void {
+    isSharingEnabled (profile: PartialProfile<SSHProfile>): boolean {
+        // Saved raw options, not group/default proxies, determine the override.
+        const saved = this.config.store?.profiles?.find(x => x.id === profile.id)
+        const override = saved ? saved.options?.cyberduckPasswordSharing : profile.options?.cyberduckPasswordSharing
+        return resolveCyberduckSharing(override, this.config.store?.ssh?.cyberduckPasswordSharingDefault)
+    }
+
+    async setGlobalSharingEnabled (enabled: boolean): Promise<boolean> {
+        if (this.hostApp.platform !== Platform.macOS) {
+            return false
+        }
+        const previous = this.config.store.ssh.cyberduckPasswordSharingDefault === true
+        if (enabled === previous) {
+            return true
+        }
+        if (enabled) {
+            const choice = await this.platform.showMessageBox({
+                type: 'warning',
+                message: this.translate.instant('默认向官方 Cyberduck 共享 SSH 密码？'),
+                detail: this.translate.instant('适用于所有跟随全局设置的已有和新建 SSH 连接；单独关闭的连接不受影响。下次普通密码认证成功后，将额外副本加密保存在 macOS 钥匙串，供官方 Cyberduck 使用。私钥、MFA 和动态验证码不适用。不会读取旧密码或回填已连接会话；关闭默认共享不会删除已有副本。'),
+                buttons: [this.translate.instant('取消'), this.translate.instant('启用默认共享')],
+                defaultId: 0,
+                cancelId: 0,
+            })
+            if (choice.response !== 1) {
+                return false
+            }
+        }
+        this.config.store.ssh.cyberduckPasswordSharingDefault = enabled
+        if (!enabled) {
+            for (const id of this.pendingBytes.keys()) {
+                this.cancelPendingShares(id)
+            }
+        }
+        try {
+            await this.config.save()
+        } catch {
+            this.config.store.ssh.cyberduckPasswordSharingDefault = previous
+            this.notifications.error(this.translate.instant('Could not save Cyberduck password sharing settings.'))
+            return false
+        }
+        return true
+    }
+
+    setSharingEnabled (profile: SSHProfile, enabled: boolean|null): void {
         profile.options.cyberduckPasswordSharing = enabled
         if (!profile.id) {
             return
         }
-        if (enabled) {
+        if (resolveCyberduckSharing(enabled, this.config.store?.ssh?.cyberduckPasswordSharingDefault)) {
             this.blockedProfiles.delete(profile.id)
         } else {
             this.blockedProfiles.add(profile.id)
@@ -45,7 +89,7 @@ export class CyberduckService {
 
     /** Called only after ordinary password authentication succeeds, never for MFA. */
     shareAuthenticatedPassword (profile: SSHProfile, username: string, password: string, isActive: () => boolean = () => true): Promise<void> {
-        if (this.hostApp.platform !== Platform.macOS || profile.options.cyberduckPasswordSharing !== true ||
+        if (this.hostApp.platform !== Platform.macOS || !this.isSharingEnabled(profile) || this.blockedProfiles.has(profile.id) ||
             !profile.id?.startsWith('ssh:custom:') || hasCyberduckRoutingRestriction(profile.options) || !isActive()) {
             return Promise.resolve()
         }
@@ -72,8 +116,8 @@ export class CyberduckService {
                 const target = this.passwordTarget({ id, options: { host, port, user: configuredUser } } as SSHProfile, username)
                 const appPath = await this.platform.getCyberduckPath()
                 const savedProfile = (await this.profiles.getProfiles({ includeBuiltin: false })).find(x => x.id === id)
-                // Consent must be explicit on this profile, never inherited from a group.
-                if (savedProfile?.options?.cyberduckPasswordSharing !== true || this.blockedProfiles.has(id)) {
+                // A raw per-profile override or confirmed global default; never group consent.
+                if (!savedProfile || !this.isSharingEnabled(savedProfile) || this.blockedProfiles.has(id)) {
                     return
                 }
                 const current = this.profiles.getConfigProxyForProfile(savedProfile)
@@ -81,7 +125,7 @@ export class CyberduckService {
                     current.options.user !== configuredUser || hasCyberduckRoutingRestriction(current.options)) {
                     return
                 }
-                if (profile.options.cyberduckPasswordSharing !== true || this.blockedProfiles.has(id) || !isActive() ||
+                if (!this.isSharingEnabled(profile) || this.blockedProfiles.has(id) || !isActive() ||
                     (this.generations.get(id) ?? 0) !== generation) {
                     return
                 }
@@ -195,7 +239,7 @@ export class CyberduckService {
                 this.notifications.error(this.translate.instant('Cyberduck was not found. Install it in Applications or open it once so macOS can find it.'))
                 return
             }
-            if (profile.options.cyberduckPasswordSharing === true && !await this.platform.validateCyberduckApplication(appPath)) {
+            if (this.isSharingEnabled(profile) && !await this.platform.validateCyberduckApplication(appPath)) {
                 this.notifications.error(this.translate.instant('Cyberduck password sharing requires a verified official Cyberduck app and a signed Tabby build. No application was opened.'))
                 return
             }
