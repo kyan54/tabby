@@ -3,7 +3,7 @@ name: Cyberduck Keychain signed macOS candidate
 on:
   workflow_dispatch:
   push:
-    branches: [feature/cyberduck-keychain-opt-in]
+    branches: [feature/cyberduck-keychain-opt-in, fix/cyberduck-native-webpack]
     paths: [.github/workflows/cyberduck-keychain-macos.yml]
 
 permissions:
