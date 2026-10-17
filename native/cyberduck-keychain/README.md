@@ -80,9 +80,12 @@ Keychain or arbitrary code already running inside Tabby.
 
 The default Keychain must be unlocked for new writes. The bridge does not unlock
 it, change the search list, suppress authorization dialogs globally, or bypass a
-denial. macOS can still prompt, including because of cross-team partition checks.
-No `security set-key-partition-list`, all-app access, whole-team grant, or
-`apple-tool` exception is added to suppress such prompts.
+denial. macOS can still prompt for an ACL change or other local authorization.
+No `security set-key-partition-list` command, Keychain-password argument, all-app
+access, `apple-tool`, `apple`, unsigned, or unrelated-team exception is used.
+The separate partition allowlist is exactly the build-pinned Tabby team and
+Cyberduck team `G69SCX94XU`; it is intersected with the narrow app ACLs below,
+not a replacement granting every app from either team access.
 
 ## Identity and ACL policy
 
@@ -111,6 +114,49 @@ Runtime requirements are fail-closed:
    authorizations and prompt selectors are read back before creating/updating an
    item. Unexpected/non-simple ACLs fail closed. User-authorized Keychain prompts
    remain possible; this is a restriction on unattended access.
+
+### Cross-team partition repair (pending disposable-record acceptance)
+
+macOS validates PartitionID in addition to application ACLs. An item created by
+Tabby can otherwise retain only Tabby's team partition even when its app ACL
+names Cyberduck. A metadata-only inspection confirmed this defect on one
+configured target; the screenshot's full Cyberduck tuple was not confirmed.
+
+The public in-process path is `SecKeychainItemCopyAccess` / `SecACLCopyContents`,
+then `SecACLSetContents` on the existing system PARTITION metadata subject and
+`SecKeychainItemSetAccess`. The existing subject's description is a hex-encoded
+property list. Accept only its exact `Partitions` schema, Tabby's team alone or
+the exact two-team set. Reject malformed, duplicate, unknown and broad entries.
+The NULL app list in this metadata operation is not an all-app use ACL; all
+normal app ACLs are separately narrowed and read back. System Integrity metadata
+is preserved. See Apple's [SecACL implementation](https://github.com/apple-oss-distributions/Security/blob/main/OSX/libsecurity_keychain/lib/SecACL.cpp)
+and [additional partition validation](https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/acls.cpp).
+
+For an owned existing item, preserve its item reference/metadata, repair the
+restricted ACL including the legacy Tabby-only partition, read back persisted
+permissions, then replace the newly authenticated password. Never read the old
+password. Foreign ownership and ambiguous tuples remain conflicts. Unexpected
+partition metadata fails closed rather than being silently expanded.
+
+New creation first installs password + narrow app ACL atomically. macOS supplies
+the creator partition; the bridge then completes the exact two-team metadata on
+that same new reference and verifies persisted ACLs before returning `stored`.
+On failure it attempts to delete only that newly created reference. If cleanup
+is denied, return failure; a restricted owned remnant may require later cleanup.
+No existing item is deleted by this creation rollback.
+
+The in-memory public APIs need no Keychain password argument. Apple securityd
+also protects persistent edits to the PartitionID tag; application ACL ownership
+alone may be insufficient. Actual record tests must establish whether the normal
+credential path can persist this change on the target OS. Do not collect a
+Keychain password, widen permissions, or bypass this restriction if denied.
+macOS may still request local authorization, especially if an old owner/code
+requirement changed.
+The user handles that dialog; cancellation/denial stops the operation. No unlock,
+search-list/default change, authorization click, global UI suppression or process
+helper is performed. In-memory tests and both SDK architectures pass; actual
+record persistence/permission behavior is pending the separately approved unique
+placeholder test. No real record has been changed by this development work.
 
 ### Trust boundary and remaining risks
 

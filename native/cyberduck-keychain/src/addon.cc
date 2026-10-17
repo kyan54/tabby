@@ -22,6 +22,7 @@
 
 #include "policy.h"
 #include "signing_config.h"
+#include "partition_policy.h"
 
 namespace {
 using namespace tabby_keychain;
@@ -263,7 +264,8 @@ const char* unlocked(SecKeychainRef keychain) {
     return (state & kSecUnlockStateStatus) ? nullptr : "denied";
 }
 
-const char* makeAccess(const std::string& path, CF<SecAccessRef>& access) {
+const char* makeAccess(const std::string& path, CF<SecAccessRef>& access,
+                       SecKeychainItemRef existing = nullptr) {
     CF<CFDataRef> before;
     std::string canonical;
     if (!validateCyberduck(path, canonical, &before)) return "denied";
@@ -275,9 +277,10 @@ const char* makeAccess(const std::string& path, CF<SecAccessRef>& access) {
     const void* apps[] = {host.get(), cyberduck.get()};
     CF<CFArrayRef> trusted(CFArrayCreate(kCFAllocatorDefault, apps, 2, &kCFTypeArrayCallBacks));
     if (!trusted.get()) return "failed";
-    // Always a two-element array. Never pass NULL/an all-app ACL or grant whole
-    // developer teams, security(1), apple-tool, or unsigned-code partitions.
-    status = SecAccessCreate(CFSTR("Tabby password shared with Cyberduck"), trusted.get(), access.out());
+    // Application grants stay exactly these two apps. Partition metadata is a
+    // separate, additional check; it never replaces these narrow app ACLs.
+    status = existing ? SecKeychainItemCopyAccess(existing, access.out()) :
+        SecAccessCreate(CFSTR("Tabby password shared with Cyberduck"), trusted.get(), access.out());
     if (status != errSecSuccess) return statusFor(status);
     // SecAccessCreate's system default also includes an all-app ENCRYPT ACL.
     // Restrict every simple ACL, including ancillary rights, before creation.
@@ -288,6 +291,8 @@ const char* makeAccess(const std::string& path, CF<SecAccessRef>& access) {
     status = SecAccessCopyACLList(access.get(), acls.out());
     if (status != errSecSuccess) return statusFor(status);
     if (!acls.get() || CFArrayGetCount(acls.get()) == 0) return "failed";
+    unsigned partitions = 0, owners = 0;
+    bool decrypt = false;
     for (CFIndex i = 0; i < CFArrayGetCount(acls.get()); ++i) {
         auto acl = static_cast<SecACLRef>(const_cast<void*>(CFArrayGetValueAtIndex(acls.get(), i)));
         CF<CFArrayRef> applications;
@@ -297,8 +302,21 @@ const char* makeAccess(const std::string& path, CF<SecAccessRef>& access) {
         if (status != errSecSuccess) return statusFor(status);
         CF<CFArrayRef> authorizations(SecACLCopyAuthorizations(acl));
         if (!authorizations.get() || !description.get()) return "failed";
+        const auto range = CFRangeMake(0, CFArrayGetCount(authorizations.get()));
+        if (CFArrayContainsValue(authorizations.get(), range, kSecACLAuthorizationPartitionID)) {
+            if (++partitions != 1) return "failed";
+            status = partition::configure(acl);
+            if (status != errSecSuccess) return statusFor(status);
+            continue;
+        }
+        if (CFArrayContainsValue(authorizations.get(), range, kSecACLAuthorizationIntegrity)) {
+            if (CFArrayGetCount(authorizations.get()) != 1 || applications.get()) return "failed";
+            continue; // Preserve system integrity metadata, never add app grants.
+        }
         const bool owner = CFArrayContainsValue(authorizations.get(),
             CFRangeMake(0, CFArrayGetCount(authorizations.get())), kSecACLAuthorizationChangeACL);
+        if (owner) ++owners;
+        if (CFArrayContainsValue(authorizations.get(), range, kSecACLAuthorizationDecrypt)) decrypt = true;
         status = SecACLSetContents(acl, owner ? hostOnly.get() : trusted.get(),
             description.get(), prompt);
         if (status != errSecSuccess) return statusFor(status);
@@ -314,6 +332,7 @@ const char* makeAccess(const std::string& path, CF<SecAccessRef>& access) {
             !CFEqual(checkedAuthorizations.get(), authorizations.get()) ||
             checkedPrompt != prompt) return "failed";
     }
+    if (owners != 1 || !decrypt || (existing && partitions != 1)) return "failed";
     CF<CFDataRef> after;
     std::string again;
     if (!validateCyberduck(canonical, again, &after) || again != canonical ||
@@ -321,12 +340,84 @@ const char* makeAccess(const std::string& path, CF<SecAccessRef>& access) {
     return nullptr;
 }
 
+// Public CopyData exposes app paths, not serialized designated requirements.
+// Exact trusted references are constructed from validated code and set/read
+// back in makeAccess; this persisted check is an additional path/count check.
+bool sameTrustedAppPaths(CFArrayRef actual, CFArrayRef expected) {
+    if (!actual || CFArrayGetCount(actual) != CFArrayGetCount(expected)) return false;
+    std::vector<bool> used(CFArrayGetCount(expected), false);
+    for (CFIndex n = 0; n < CFArrayGetCount(actual); ++n) {
+        CF<CFDataRef> value;
+        if (SecTrustedApplicationCopyData(static_cast<SecTrustedApplicationRef>(
+                const_cast<void*>(CFArrayGetValueAtIndex(actual, n))), value.out()) != errSecSuccess) return false;
+        bool found = false;
+        for (CFIndex m = 0; m < CFArrayGetCount(expected); ++m) {
+            if (used[m]) continue;
+            CF<CFDataRef> wanted;
+            if (SecTrustedApplicationCopyData(static_cast<SecTrustedApplicationRef>(
+                    const_cast<void*>(CFArrayGetValueAtIndex(expected, m))), wanted.out()) != errSecSuccess) return false;
+            if (CFEqual(value.get(), wanted.get()) && CFDataGetLength(wanted.get()) > 1 &&
+                CFDataGetBytePtr(wanted.get())[CFDataGetLength(wanted.get()) - 1] == 0) {
+                used[m] = true;
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+const char* verifyStoredAccess(SecKeychainItemRef item, const std::string& path) {
+    std::string canonical;
+    if (!validateCyberduck(path, canonical)) return "denied";
+    CF<SecTrustedApplicationRef> host, duck;
+    OSStatus status = SecTrustedApplicationCreateFromPath(nullptr, host.out());
+    if (status == errSecSuccess) status = SecTrustedApplicationCreateFromPath(canonical.c_str(), duck.out());
+    if (status != errSecSuccess) return statusFor(status);
+    const void* apps[] = {host.get(), duck.get()};
+    CF<CFArrayRef> trusted(CFArrayCreate(nullptr, apps, 2, &kCFTypeArrayCallBacks));
+    CF<CFArrayRef> hostOnly(CFArrayCreate(nullptr, apps, 1, &kCFTypeArrayCallBacks));
+    if (!trusted.get() || !hostOnly.get()) return "failed";
+    CF<SecAccessRef> access;
+    CF<CFArrayRef> acls;
+    status = SecKeychainItemCopyAccess(item, access.out());
+    if (status == errSecSuccess) status = SecAccessCopyACLList(access.get(), acls.out());
+    if (status != errSecSuccess) return statusFor(status);
+    if (!acls.get() || !CFArrayGetCount(acls.get())) return "failed";
+    unsigned partitions = 0, owners = 0;
+    bool decrypt = false;
+    for (CFIndex n = 0; n < CFArrayGetCount(acls.get()); ++n) {
+        auto acl = static_cast<SecACLRef>(const_cast<void*>(CFArrayGetValueAtIndex(acls.get(), n)));
+        CF<CFArrayRef> applications;
+        CF<CFStringRef> description;
+        SecKeychainPromptSelector prompt = 0;
+        status = SecACLCopyContents(acl, applications.out(), description.out(), &prompt);
+        if (status != errSecSuccess) return statusFor(status);
+        CF<CFArrayRef> rights(SecACLCopyAuthorizations(acl));
+        if (!rights.get() || !CFArrayGetCount(rights.get())) return "failed";
+        auto range = CFRangeMake(0, CFArrayGetCount(rights.get()));
+        if (CFArrayContainsValue(rights.get(), range, kSecACLAuthorizationPartitionID)) {
+            if (++partitions != 1 || applications.get() || CFArrayGetCount(rights.get()) != 1 ||
+                !partition::allowed(description.get(), true)) return "failed";
+        } else if (CFArrayContainsValue(rights.get(), range, kSecACLAuthorizationIntegrity)) {
+            if (applications.get() || CFArrayGetCount(rights.get()) != 1) return "failed";
+        } else {
+            bool owner = CFArrayContainsValue(rights.get(), range, kSecACLAuthorizationChangeACL);
+            if (owner) ++owners;
+            if (CFArrayContainsValue(rights.get(), range, kSecACLAuthorizationDecrypt)) decrypt = true;
+            if (!sameTrustedAppPaths(applications.get(), owner ? hostOnly.get() : trusted.get())) return "failed";
+        }
+    }
+    return partitions == 1 && owners == 1 && decrypt ? nullptr : "failed";
+}
+
 const char* writePassword(Tuple& tuple, const std::string& path, const void* password,
                           std::size_t passwordSize) {
     if (std::strlen(TABBY_KEYCHAIN_TEAM_ID) != 10) return "unavailable";
     if (!validateHost()) return "denied";
-    CF<SecAccessRef> access;
-    if (const char* error = makeAccess(path, access)) return error;
+    std::string canonical;
+    if (!validateCyberduck(path, canonical)) return "denied";
     CF<SecKeychainItemRef> item;
     const char* found = findOwned(tuple, item);
     if (!std::strcmp(found, "owned")) {
@@ -334,9 +425,12 @@ const char* writePassword(Tuple& tuple, const std::string& path, const void* pas
         OSStatus status = SecKeychainItemCopyKeychain(item.get(), keychain.out());
         if (status != errSecSuccess) return statusFor(status);
         if (const char* error = unlocked(keychain.get())) return error;
+        CF<SecAccessRef> access;
+        if (const char* error = makeAccess(path, access, item.get())) return error;
         // Restrict access BEFORE replacing the secret, never after.
         status = SecKeychainItemSetAccess(item.get(), access.get());
         if (status != errSecSuccess) return statusFor(status);
+        if (const char* error = verifyStoredAccess(item.get(), path)) return error;
         status = SecKeychainItemModifyAttributesAndData(item.get(), nullptr,
             static_cast<UInt32>(passwordSize), password);
         return status == errSecSuccess ? "stored" : statusFor(status);
@@ -347,6 +441,8 @@ const char* writePassword(Tuple& tuple, const std::string& path, const void* pas
     OSStatus status = SecKeychainCopyDefault(keychain.out());
     if (status != errSecSuccess) return statusFor(status);
     if (const char* error = unlocked(keychain.get())) return error;
+    CF<SecAccessRef> access;
+    if (const char* error = makeAccess(path, access)) return error;
     std::string marker = ownerMarker(tuple.owner);
     const char* label = "Tabby shared SFTP password";
     UInt32 creator = kCreator;
@@ -362,8 +458,23 @@ const char* writePassword(Tuple& tuple, const std::string& path, const void* pas
     // Password + narrow ACL are installed in ONE Security.framework operation.
     // A duplicate appearing after our search is a conflict, not an update.
     status = SecKeychainItemCreateFromContent(kSecInternetPasswordItemClass, &list,
-        static_cast<UInt32>(passwordSize), password, keychain.get(), access.get(), nullptr);
-    return status == errSecSuccess ? "stored" : statusFor(status);
+        static_cast<UInt32>(passwordSize), password, keychain.get(), access.get(), item.out());
+    if (status != errSecSuccess) return statusFor(status);
+    // The initial create is already app-restricted and partitioned to Tabby.
+    // Add the verified receiver's partition only on this new exact item ref.
+    CF<SecAccessRef> completed;
+    const char* error = makeAccess(path, completed, item.get());
+    if (!error) {
+        status = SecKeychainItemSetAccess(item.get(), completed.get());
+        error = status == errSecSuccess ? verifyStoredAccess(item.get(), path) : statusFor(status);
+    }
+    if (error) {
+        // Never report stored with incomplete receiver permissions. Remove only
+        // the item just created here; a cleanup denial remains a failed write.
+        status = SecKeychainItemDelete(item.get());
+        return status == errSecSuccess ? error : "failed";
+    }
+    return "stored";
 }
 
 const char* revokePassword(Tuple& tuple) {
