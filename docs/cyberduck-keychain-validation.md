@@ -86,3 +86,41 @@ pass.
 5. Only after results are reviewed should this draft become eligible for merge
    and a separately authorized release. A draft PR/CI artifact is not approval
    to publish a release or enable the setting on real profiles.
+
+
+## macOS validation, 2026-10-17 (signed candidate pending)
+
+Implementation head examined: `8bb17f915350dc61739e4b0ed9b8c57fa745bfce`.
+A separate worktree preserves the earlier development and release worktrees.
+
+Passed without accessing any credential records:
+
+- Native SDK compile and link for **arm64 and x64**, using actual installed
+  Electron **43.7.0** headers and the public build-time team pin `37BL9CNF8B`.
+- On this Mac: 69 SSH, 19 unit and 6 portable native policy tests; repository lint.
+- The actual arm64 addon loads in generic Node. Host preflight is false;
+  synthetic valid-tuple writes/revoke return denied before the credential-query
+  code, invalid tuples return invalid, and identified Buffers are zeroed.
+- A metadata-only probe reusing the actual native signature functions accepts
+  the installed official Cyberduck (`G69SCX94XU`) and Tabby (`37BL9CNF8B`), while
+  rejecting the unsigned probe as a host. The installed Renderer identifier is
+  `org.tabby.helper.Renderer`; both installed apps pass strict deep signature
+  verification.
+- A second probe contains no SecKeychain item API imports. It constructs only
+  in-memory SecAccess/SecACL objects using the real `makeAccess` implementation;
+  all three ACLs pass its narrowing and read-back checks. Nothing is persisted.
+
+The new `Cyberduck Keychain signed macOS candidate` workflow creates signed,
+notarized Actions artifacts only, never a GitHub Release. It requires existing
+credentials, checks the addon signature/team/architecture, and tests loading it
+from the sealed app using only invalid inputs (no credential lookup or write).
+This does **not** replace actual Renderer or persisted-Keychain acceptance.
+
+Still blocked on user-prepared isolation: a separate macOS test account with a
+manually configured disposable default Keychain/search list. The agent has not
+created accounts/keychains, changed the search list, written fixture credential
+records, unlocked a Keychain, accepted authorization, or connected to a server.
+The user must perform any required account/Keychain setup and OS authorization.
+Persisted ACL/partition behavior, real denial/cancel/lock behavior, owned-item
+update/conflict/revoke and official Cyberduck first-open retrieval remain open.
+Do not merge or publish an installer until those release gates are resolved.

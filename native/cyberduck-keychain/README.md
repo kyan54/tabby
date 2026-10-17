@@ -5,11 +5,12 @@ for an SFTP connection. It is loaded directly into the existing signed Tabby
 renderer. There is no helper process, IPC service, shell command, credential
 retrieval API, or password-bearing temporary file.
 
-**Release gate:** the full addon has not been compiled or exercised against
-Security.framework in the Linux implementation environment. The portable policy
-tests and source-contract checks below pass; they do **not** validate native
-linking, macOS prompts, persisted ACLs, or Cyberduck retrieval. Complete the signed
-macOS acceptance matrix before releasing/enabling this feature.
+**Release gate:** arm64/x64 SDK compile/link, unsigned-host rejection and
+in-memory ACL construction/read-back now pass on macOS (Electron 43.7.0).
+These checks do **not** validate signed Renderer execution, macOS prompts,
+persisted ACLs, or Cyberduck retrieval. The signed-candidate Actions workflow
+produces validation artifacts only. Complete the signed macOS acceptance matrix
+before merging/releasing/enabling this feature.
 
 ## API
 
