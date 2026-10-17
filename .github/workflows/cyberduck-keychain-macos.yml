@@ -154,8 +154,26 @@ jobs:
           PY
           cat dist/SHA256SUMS-dmg.txt dist/SHA256SUMS-zip.txt
           cat dist/SIGNATURE_INFO.txt
-      - name: Load sealed native module in signed app without Keychain access
+      - name: Read bootstrap fuse without changing security configuration
+        id: qa_bootstrap
         if: steps.signed_package.outcome == 'success'
+        shell: bash
+        run: |
+          node --input-type=module - <<'JSFUSE'
+          import fs from 'node:fs'
+          import fuses from '@electron/fuses'
+          import { canBootstrapForQA } from './scripts/qa-bootstrap-policy.mjs'
+          const wire = await fuses.getCurrentFuseWire('dist/mac-arm64/Tabby.app')
+          const enabled = canBootstrapForQA(wire)
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${enabled}\n`)
+          const info = JSON.parse(fs.readFileSync('dist/BUILD_INFO.json', 'utf8'))
+          info.qa_bootstrap_available = enabled
+          info.native_runtime_acceptance = 'pending-user-controlled-GUI-and-Keychain-validation'
+          fs.writeFileSync('dist/BUILD_INFO.json', JSON.stringify(info, null, 2) + '\n')
+          console.log(enabled ? 'Read-only Node-bootstrap smoke test is available.' : 'RunAsNode disabled: no application bootstrap attempted; runtime remains unverified.')
+          JSFUSE
+      - name: Load sealed native module in signed app without Keychain access
+        if: steps.signed_package.outcome == 'success' && steps.qa_bootstrap.outputs.enabled == 'true'
         shell: bash
         run: |
           cat > "$RUNNER_TEMP/keychain-safe-load.cjs" <<'JS'
@@ -167,7 +185,13 @@ jobs:
           assert.equal(addon.validateTarget('/nonexistent.app'), false)
           console.log('Signed app loaded sealed addon; invalid input rejected; no credential lookup or mutation attempted.')
           JS
-          ELECTRON_RUN_AS_NODE=1 dist/mac-arm64/Tabby.app/Contents/MacOS/Tabby "$RUNNER_TEMP/keychain-safe-load.cjs" "$GITHUB_WORKSPACE/dist/mac-arm64/Tabby.app/Contents/Resources/cyberduck-keychain/cyberduck_keychain.node"
+          python3 - <<'PYRUN'
+          import os, subprocess
+          subprocess.run(['dist/mac-arm64/Tabby.app/Contents/MacOS/Tabby',
+              os.environ['RUNNER_TEMP'] + '/keychain-safe-load.cjs',
+              os.environ['GITHUB_WORKSPACE'] + '/dist/mac-arm64/Tabby.app/Contents/Resources/cyberduck-keychain/cyberduck_keychain.node'],
+              env={**os.environ, 'ELECTRON_RUN_AS_NODE': '1'}, timeout=45, check=True)
+          PYRUN
       - name: Upload arm64 DMG and verification
         if: steps.signed_package.outcome == 'success'
         uses: actions/upload-artifact@v4

@@ -1,5 +1,6 @@
-// Metadata-only QA. Run with the signed main or Renderer executable in Node
-// bootstrap mode. This script never submits a valid credential-write tuple.
+// Metadata-only QA. Invoke through scripts/run-keychain-signed-preflight.mjs,
+// which checks the fuse BEFORE starting anything. Never enable a fuse for QA.
+// This script never submits a valid credential-write tuple.
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const executable = process.execPath
