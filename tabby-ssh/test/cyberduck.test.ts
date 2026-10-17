@@ -84,14 +84,24 @@ describe('Cyberduck launch workflow', () => {
             assert.match(f.dialogs[0].message, /jump host or proxy/)
         }
     })
-    it('defaults to cancel on missing OSC cwd and requires explicit server-only consent', async () => {
+    it('opens the server directly without a dialog or invented cwd when OSC cwd is unknown', async () => {
         const f = fixture()
         await f.service.launch({ options: target }, 'u', async () => null, () => true)
-        assert.equal(f.calls.length, 0)
-        assert.equal(f.dialogs[0].defaultId, 0)
-        f.adapter.showMessageBox = async () => ({ response: 1 })
-        await f.service.launch({ options: target }, 'u', async () => null, () => true)
+        assert.equal(f.calls.length, 1)
+        assert.equal(f.dialogs.length, 0)
         assert.equal(new URL(f.calls[0][1][2]).pathname, '')
+    })
+    it('keeps signature checks and session validation before a server-only open', async () => {
+        const f = sharingFixture()
+        f.adapter.validateCyberduckApplication = async () => false
+        await f.service.launch(f.profile, 'u', async () => null, () => true)
+        assert.equal(f.calls.length, 0)
+        assert.match(f.errors[0], /verified official/)
+        const disconnected = fixture()
+        let active = true
+        await disconnected.service.launch({ options: target }, 'u', async () => { active = false; return null }, () => active)
+        assert.equal(disconnected.calls.length, 0)
+        assert.equal(disconnected.dialogs.length, 0)
     })
     it('does not launch a disconnected/replaced session or on non-macOS', async () => {
         const f = fixture()

@@ -205,19 +205,7 @@ export class CyberduckService {
             }
             const cwd = await getCwd()
             const url = buildCyberduckURL(target, username ?? target.user, cwd)
-            if (cwd === null) {
-                const choice = await this.platform.showMessageBox({
-                    type: 'warning',
-                    message: this.translate.instant('The remote shell has not reported its current directory.'),
-                    detail: this.translate.instant('Open only the server? Cyberduck will choose the directory. Authentication is managed by Cyberduck.'),
-                    buttons: [this.translate.instant('Cancel'), this.translate.instant('Open server only')],
-                    defaultId: 0,
-                    cancelId: 0,
-                })
-                if (choice.response !== 1) {
-                    return
-                }
-            }
+            // Unknown cwd is a normal server-only open. Never invent a path.
             if (!isActive()) {
                 return
             }
