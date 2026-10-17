@@ -6,6 +6,7 @@ export class SSHConfigProvider extends ConfigProvider {
         ssh: {
             warnOnClose: false,
             winSCPPath: null,
+            cyberduckPasswordSharingDefault: false,
             sftpSort: {
                 rules: null,
                 field: 'name',

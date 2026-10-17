@@ -38,7 +38,8 @@ up to 1024 bytes. Control characters are rejected in tuple/owner metadata.
 Password buffers can be empty and are limited to 65536 bytes.
 
 The caller must establish that the password is a successful, ordinary SSH
-password, that profile sharing is explicitly enabled, and that user consent
+password, that profile sharing is explicitly enabled or follows the separately
+confirmed global default (an explicit false always wins), and that user consent
 covers persistent sharing with Cyberduck. This API cannot determine password
 provenance. Never pass private-key passphrases, keyboard-interactive responses,
 OTP/MFA answers, or unsuccessful guesses.

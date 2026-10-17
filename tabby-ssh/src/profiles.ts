@@ -19,7 +19,7 @@ export class SSHProfilesService extends QuickConnectProfileProvider<SSHProfile> 
             user: 'root',
             auth: null,
             password: null,
-            cyberduckPasswordSharing: false,
+            cyberduckPasswordSharing: null,
             privateKeys: [],
             keepaliveInterval: 5000,
             keepaliveCountMax: 10,

@@ -182,16 +182,18 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     span(translate) Forget
 
             .mb-3(*ngIf='hostApp.platform === Platform.macOS')
-                .form-check
-                    input.form-check-input(
-                        type='checkbox',
+                .form-group
+                    label(for='cyberduckPasswordSharing') 向 Cyberduck 共享 SSH 密码
+                    select.form-control(
                         id='cyberduckPasswordSharing',
                         [ngModel]='profile.options.cyberduckPasswordSharing',
                         (ngModelChange)='setCyberduckPasswordSharing($event)',
                         [disabled]='!canShareCyberduckPassword',
                         aria-describedby='cyberduckPasswordSharingDescription'
                     )
-                    label.form-check-label(for='cyberduckPasswordSharing', translate) Share this profile's SSH password with Cyberduck
+                        option([ngValue]='null') 跟随全局设置
+                        option([ngValue]='true') 此连接始终共享
+                        option([ngValue]='false') 此连接不共享
                 .text-muted.mt-2#cyberduckPasswordSharingDescription
                     p.mb-1(translate) After a successful password login, Tabby creates or updates an additional encrypted Internet Password in macOS Keychain that the official Cyberduck app can access. macOS may ask for permission locally.
                     p.mb-1(translate) Save this setting, then fully reconnect. Only ordinary SSH password authentication is shared; private keys, passphrases and keyboard-interactive/MFA responses are excluded. Do not enable for accounts that use one-time values in the password prompt.

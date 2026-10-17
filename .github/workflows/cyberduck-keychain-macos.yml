@@ -1,9 +1,10 @@
 name: Cyberduck Keychain signed macOS candidate
+# Include the latest global-inheritance queue/cancellation regression in this candidate.
 
 on:
   workflow_dispatch:
   push:
-    branches: [feature/cyberduck-keychain-opt-in, fix/cyberduck-native-webpack]
+    branches: [feature/cyberduck-keychain-opt-in, fix/cyberduck-native-webpack, feat/cyberduck-direct-open]
     paths: [.github/workflows/cyberduck-keychain-macos.yml]
 
 permissions:
@@ -112,7 +113,9 @@ jobs:
           path: diagnostics/*
       - name: Verify packages and record provenance
         if: steps.signed_package.outcome == 'success'
+        shell: bash
         run: |
+          set -euo pipefail
           APP=dist/mac-arm64/Tabby.app
           test "$(lipo -archs "$APP/Contents/MacOS/Tabby")" = arm64
           hdiutil verify dist/*.dmg
@@ -127,7 +130,7 @@ jobs:
           test "$(sed -n 's/^TeamIdentifier=//p' dist/KEYCHAIN_ADDON_SIGNATURE.txt)" = 37BL9CNF8B
           codesign -dv --verbose=2 "$APP" > dist/SIGNATURE_INFO.txt 2>&1 || true
           if [[ "$HAS_MAC_SIGNING" == true && "$HAS_MAC_NOTARIZATION" == true ]]; then
-            xcrun stapler validate "$APP" >> dist/SIGNATURE_INFO.txt 2>&1
+            xcrun stapler validate "$APP" 2>&1 | tee -a dist/SIGNATURE_INFO.txt
           fi
           shasum -a 256 dist/*.dmg | sed 's|dist/||' > dist/SHA256SUMS-dmg.txt
           shasum -a 256 dist/*.zip | sed 's|dist/||' > dist/SHA256SUMS-zip.txt
@@ -218,6 +221,17 @@ jobs:
             dist/*.zip
             dist/SHA256SUMS-zip.txt
             dist/BUILD_INFO.json
+            dist/SIGNATURE_INFO.txt
+            dist/KEYCHAIN_ADDON_SIGNATURE.txt
+
+      - name: Preserve verification metadata on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Keychain-verification-metadata-${{ github.sha }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
             dist/SIGNATURE_INFO.txt
             dist/KEYCHAIN_ADDON_SIGNATURE.txt
 

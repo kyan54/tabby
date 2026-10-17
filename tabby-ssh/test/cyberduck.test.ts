@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
-import { buildCyberduckURL, hasCyberduckRoutingRestriction } from '../src/cyberduck.ts'
+import { buildCyberduckURL, hasCyberduckRoutingRestriction, resolveCyberduckSharing } from '../src/cyberduck.ts'
 
 const target = { host: 'example.invalid', user: 'profile-user' }
 const transpile = (file: string) => ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {
@@ -13,7 +13,7 @@ const Platform = { macOS: 'mac', Windows: 'win', Linux: 'linux' }
 class SSHTabComponent { }
 const core = { Injectable: () => (x: any) => x, Platform, TabContextMenuItemProvider: class {} }
 const serviceExports: any = {}
-runInNewContext(transpile('../src/services/cyberduck.service.ts'), { Buffer, URL, exports: serviceExports, require: (name: string) => name === '@angular/core' ? core : name === '../cyberduck' ? { buildCyberduckURL, hasCyberduckRoutingRestriction } : core })
+runInNewContext(transpile('../src/services/cyberduck.service.ts'), { Buffer, URL, exports: serviceExports, require: (name: string) => name === '@angular/core' ? core : name === '../cyberduck' ? { buildCyberduckURL, hasCyberduckRoutingRestriction, resolveCyberduckSharing } : core })
 const menuExports: any = {}
 runInNewContext(transpile('../src/tabContextMenu.ts'), { exports: menuExports, require: (name: string) => name === './components/sshTab.component' ? { SSHTabComponent } : core })
 
@@ -25,7 +25,7 @@ function fixture (platformName = Platform.macOS) {
         exec: async (...args: any[]) => { calls.push(args) },
         showMessageBox: async (options: any) => { dialogs.push(options); return { response: 0 } },
     }
-    const service = new serviceExports.CyberduckService({ platform: platformName }, adapter, { error: (x: string) => errors.push(x) }, { instant: (x: string) => x })
+    const service = new serviceExports.CyberduckService({ platform: platformName }, adapter, { error: (x: string) => errors.push(x) }, { instant: (x: string) => x }, {}, { store: { ssh: { cyberduckPasswordSharingDefault: false } } })
     return { service, adapter, calls, errors, dialogs }
 }
 
@@ -84,14 +84,24 @@ describe('Cyberduck launch workflow', () => {
             assert.match(f.dialogs[0].message, /jump host or proxy/)
         }
     })
-    it('defaults to cancel on missing OSC cwd and requires explicit server-only consent', async () => {
+    it('opens the server directly without a dialog or invented cwd when OSC cwd is unknown', async () => {
         const f = fixture()
         await f.service.launch({ options: target }, 'u', async () => null, () => true)
-        assert.equal(f.calls.length, 0)
-        assert.equal(f.dialogs[0].defaultId, 0)
-        f.adapter.showMessageBox = async () => ({ response: 1 })
-        await f.service.launch({ options: target }, 'u', async () => null, () => true)
+        assert.equal(f.calls.length, 1)
+        assert.equal(f.dialogs.length, 0)
         assert.equal(new URL(f.calls[0][1][2]).pathname, '')
+    })
+    it('keeps signature checks and session validation before a server-only open', async () => {
+        const f = sharingFixture()
+        f.adapter.validateCyberduckApplication = async () => false
+        await f.service.launch(f.profile, 'u', async () => null, () => true)
+        assert.equal(f.calls.length, 0)
+        assert.match(f.errors[0], /verified official/)
+        const disconnected = fixture()
+        let active = true
+        await disconnected.service.launch({ options: target }, 'u', async () => { active = false; return null }, () => active)
+        assert.equal(disconnected.calls.length, 0)
+        assert.equal(disconnected.dialogs.length, 0)
     })
     it('does not launch a disconnected/replaced session or on non-macOS', async () => {
         const f = fixture()
@@ -139,11 +149,12 @@ function sharingFixture () {
         return 'stored'
     }
     adapter.revokeCyberduckPassword = async (connection: any) => { revokes.push(connection); return 'revoked' }
+    const config = { store: { ssh: { cyberduckPasswordSharingDefault: false } }, save: async () => {} }
     const service = new serviceExports.CyberduckService({ platform: Platform.macOS }, adapter,
         { error: (x: string) => f.errors.push(x) }, { instant: (x: string) => x },
         { getProfiles: async () => saved ? [saved] : [], getConfigProxyForProfile: (x: any) => x,
-            writeProfile: async (x: any) => { saved = x } }, { save: async () => {} })
-    return { ...f, profile, service, writes, revokes, setSaved: (value: any) => { saved = value }, getSaved: () => saved }
+            writeProfile: async (x: any) => { saved = x } }, config)
+    return { ...f, profile, service, config, writes, revokes, setSaved: (value: any) => { saved = value }, getSaved: () => saved }
 }
 
 describe('Cyberduck opt-in credential lifecycle (mocks only)', () => {
@@ -287,5 +298,90 @@ describe('Cyberduck cancellation and durable revocation', () => {
         await f.service.launch(f.profile, 'u', async () => '/', () => true)
         assert.equal(f.calls.length, 0)
         assert.equal(f.errors.length, 1)
+    })
+})
+
+describe('Cyberduck confirmed global default and explicit overrides', () => {
+    it('fails closed on upgrade and preserves explicit false instead of treating it as unset', () => {
+        for (const value of [null, undefined, false, 'true', 1]) assert.equal(resolveCyberduckSharing(value, false), false)
+        for (const value of [null, undefined, true]) assert.equal(resolveCyberduckSharing(value, true), true)
+        for (const value of [false, 'true', 1]) assert.equal(resolveCyberduckSharing(value, true), false)
+        assert.equal(resolveCyberduckSharing(true, false), true)
+    })
+    it('cancelling global consent changes no settings and never reads or writes passwords', async () => {
+        const f = sharingFixture()
+        let saves = 0
+        f.config.save = async () => { saves++ }
+        assert.equal(await f.service.setGlobalSharingEnabled(true), false)
+        assert.equal(f.config.store.ssh.cyberduckPasswordSharingDefault, false)
+        assert.equal(saves, 0)
+        assert.equal(f.writes.length, 0)
+        assert.equal(f.dialogs[0].defaultId, 0)
+        for (const text of ['已有和新建', 'macOS 钥匙串', '官方 Cyberduck', '动态验证码', '不会读取旧密码']) assert.ok(f.dialogs[0].detail.includes(text))
+    })
+    it('enables the default once without backfilling sessions and shares only on later authentication', async () => {
+        const f = sharingFixture()
+        delete f.profile.options.cyberduckPasswordSharing
+        f.adapter.showMessageBox = async () => ({ response: 1 })
+        assert.equal(await f.service.setGlobalSharingEnabled(true), true)
+        assert.equal(f.config.store.ssh.cyberduckPasswordSharingDefault, true)
+        assert.equal(f.writes.length, 0)
+        assert.equal(await f.service.setGlobalSharingEnabled(true), true)
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 1)
+        f.profile.options.cyberduckPasswordSharing = false
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 1)
+    })
+    it('uses raw saved profile overrides rather than inherited group values', async () => {
+        const f = sharingFixture()
+        const raw = { ...f.profile, options: { ...target } }
+        ;(f.config.store as any).profiles = [raw]
+        f.setSaved(raw)
+        // Session proxy says true (e.g. a group), but no raw consent/global consent exists.
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 0)
+        f.config.store.ssh.cyberduckPasswordSharingDefault = true
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 1)
+        ;(raw.options as any).cyberduckPasswordSharing = false
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 1)
+    })
+    it('following global while it is off does not leave a stale block after later global consent', async () => {
+        const f = sharingFixture()
+        f.service.setSharingEnabled(f.profile, false)
+        f.service.setSharingEnabled(f.profile, null)
+        f.adapter.showMessageBox = async () => ({ response: 1 })
+        await f.service.setGlobalSharingEnabled(true)
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 1)
+    })
+    it('disabling global sharing clears queued buffers before discovery completes', async () => {
+        const f = sharingFixture()
+        delete f.profile.options.cyberduckPasswordSharing
+        f.config.store.ssh.cyberduckPasswordSharingDefault = true
+        let resolve: (value: string) => void
+        f.adapter.getCyberduckPath = () => new Promise<string>(r => { resolve = r })
+        const pending = f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        await Promise.resolve()
+        const buffers: Set<Buffer> = f.service.pendingBytes.get(f.profile.id)
+        assert.ok(buffers.size)
+        await f.service.setGlobalSharingEnabled(false)
+        for (const bytes of buffers) assert.ok(bytes.every(x => x === 0))
+        resolve!('/Applications/Cyberduck.app')
+        await pending
+        assert.equal(f.writes.length, 0)
+    })
+    it('revoke persists false so a global default cannot recreate that connection copy', async () => {
+        const f = sharingFixture()
+        f.profile.options.cyberduckPasswordSharing = null
+        f.config.store.ssh.cyberduckPasswordSharingDefault = true
+        f.adapter.showMessageBox = async () => ({ response: 1 })
+        await f.service.revoke(f.profile)
+        assert.equal(f.getSaved().options.cyberduckPasswordSharing, false)
+        f.service.blockedProfiles.clear() // Simulate loss of process-only state after restart.
+        await f.service.shareAuthenticatedPassword({ ...f.profile, options: { ...f.profile.options, cyberduckPasswordSharing: null } }, 'u', 'synthetic')
+        assert.equal(f.writes.length, 0)
     })
 })

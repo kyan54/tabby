@@ -9,8 +9,15 @@ All credential values in tests are synthetic fixtures.
 
 ## Implemented behavior
 
-- Default-off, explicit saved-profile opt-in. Group/default/duplicate profiles do
-  not inherit authorization. Saving and fully reconnecting is required.
+- Sharing remains off on upgrade. A saved profile can explicitly enable/disable it,
+  or follow the separately confirmed global default in SSH settings. Explicit false
+  always wins, including after revoke. New/duplicated profiles follow that global
+  choice, never group/provider consent. Saving and fully reconnecting is required.
+- Global enablement explains scope and confirms once; cancelling changes no settings.
+  It never retrieves old passwords or backfills existing sessions. Disabling stops
+  inherited sharing and cancels queued buffers; existing Keychain copies remain.
+- Unknown remote cwd opens the server directly; valid known cwd is preserved.
+  Signature, routing and session-validity checks remain mandatory.
 - Capture only successful ordinary password authentication, using the actual
   authenticated username. No private-key/passphrase, keyboard-interactive or
   partial MFA response capture. Ordinary password prompts are opaque: do not

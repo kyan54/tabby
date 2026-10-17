@@ -1,5 +1,18 @@
 h3 SSH
 
+.form-line(*ngIf='hostApp.platform === Platform.macOS')
+    .header
+        .title 默认向 Cyberduck 共享密码
+        .description 跟随全局设置的已有和新建连接，将在下次普通密码认证成功后，把额外副本加密保存在 macOS 钥匙串，供官方 Cyberduck 使用。单独关闭优先；动态验证码不适用。
+    .form-check.form-switch
+        input.form-check-input(
+            type='checkbox',
+            aria-label='默认向 Cyberduck 共享密码',
+            [checked]='config.store.ssh.cyberduckPasswordSharingDefault',
+            (change)='setCyberduckDefault($event)',
+            [disabled]='changingCyberduckDefault',
+        )
+
 .form-line
     .header
         .title(translate) Warn when closing active connections

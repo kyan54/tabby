@@ -4,6 +4,7 @@ import { describe, it } from 'node:test'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import { selectNextAuthMethod, updateAuthPlanAfterFailure } from '../src/session/authMethodSelection.ts'
+import { resolveCyberduckSharing } from '../src/cyberduck.ts'
 
 // Run the real authentication control flow with only transport, UI, and Keychain
 // adapters replaced. These tests never connect to a server or write credentials.
@@ -31,6 +32,7 @@ runInNewContext(compiled, {
         if (name === 'tabby-core') return { Platform }
         if (name === 'russh') return { SSHClient, AuthenticatedSSHClient }
         if (name === '../services/cyberduck.service') return { CyberduckService }
+        if (name === '../cyberduck') return { resolveCyberduckSharing }
         if (name === './authMethodSelection') return { selectNextAuthMethod, updateAuthPlanAfterFailure }
         return {}
     },
@@ -47,6 +49,7 @@ function fixture (methods: any[], sharing: any = true, platform = Platform.macOS
         allAuthMethods: methods,
         previouslyDisconnected: false,
         hostApp: { platform },
+        config: { store: { ssh: { cyberduckPasswordSharingDefault: false } } },
         notifications: { error: (message: string) => { errors.push(message) } },
         translate: { instant: (message: string) => message },
         injector: { get: (token: any) => { assert.equal(token, CyberduckService); return service } },
@@ -141,5 +144,22 @@ describe('Cyberduck ordinary-password authentication capture', () => {
         assert.equal(f.errors.length, 1)
         assert.ok(!f.errors[0].includes('SECRET_RAW'))
         assert.ok(!f.logged.join(' ').includes('SECRET_RAW'))
+    })
+})
+
+describe('Cyberduck global-default authentication capture', () => {
+    it('captures only a new successful ordinary password authentication when global consent is enabled', async () => {
+        const f = fixture([{ type: 'saved-password', password: 'synthetic' }], null)
+        f.session.config = { store: { ssh: { cyberduckPasswordSharingDefault: true }, profiles: [{ id: f.session.profile.id, options: {} }] } }
+        assert.equal(f.shared.length, 0)
+        assert.ok(await f.session.handleAuth() instanceof AuthenticatedSSHClient)
+        assert.equal(f.shared.length, 1)
+    })
+    it('keeps raw explicit opt-out stronger than global consent and stale session snapshots', async () => {
+        const f = fixture([{ type: 'saved-password', password: 'synthetic' }], true)
+        f.session.config = { store: { ssh: { cyberduckPasswordSharingDefault: true }, profiles: [{ id: f.session.profile.id, options: { cyberduckPasswordSharing: false } }] } }
+        f.session.injector.get = () => assert.fail('No sharing service for opted-out connection')
+        assert.ok(await f.session.handleAuth() instanceof AuthenticatedSSHClient)
+        assert.equal(f.shared.length, 0)
     })
 })
