@@ -124,3 +124,37 @@ The user must perform any required account/Keychain setup and OS authorization.
 Persisted ACL/partition behavior, real denial/cancel/lock behavior, owned-item
 update/conflict/revoke and official Cyberduck first-open retrieval remain open.
 Do not merge or publish an installer until those release gates are resolved.
+
+
+### Candidate packaging transport issue
+
+Run 39021008333 at 24495033 failed twice after signing when Apple's CloudKit
+stapling endpoint lost its connection (`stapler 68`, `NSURLError -1005`). This
+is not a native compiler or signing-pin failure. The candidate-only workflow now
+wraps the existing stapling operation with at most three retries of that specific
+transport failure. Rejections, other errors and exhausted retries still fail.
+Three tests cover recovery, the four-attempt cap, and non-retryable failures
+(native-policy/build tests now total 9; SSH/unit remain 69/19).
+
+If that transport failure persists, the workflow can preserve a strictly signed
+app/module as **DIAGNOSTIC-NOT-STAPLED**, with incomplete provenance metadata.
+The build remains failed and does not upload accepted candidate installers.
+Such a diagnostic must pass stapling/Gatekeeper and the native acceptance gate
+before it can be treated as a validated candidate. It is never a Release.
+
+### Minimal user-operated isolation
+
+A clean temporary standard macOS account can use its own default login Keychain
+as the disposable QA store; there is no need to change the existing account's
+search list or create another Keychain. The user creates/switches this account,
+keeps real SSH/password-manager/proxy configuration out of it, and handles OS
+permission decisions. The agent does not create accounts or accept grants.
+
+An explicitly approved alternative is namespace-only native fixture testing in
+the existing default Keychain: unique `.invalid` hosts/accounts and non-authenticating
+values, cleanup limited to fixture-owned references, no search-list/default or
+security-policy changes. This provides weaker environment isolation and does not
+by itself satisfy the full release matrix. Normal Cyberduck startup consults SSH
+and proxy configuration; `.invalid` alone is not proof that the GUI cannot touch
+existing authentication state. Real lock/multiple-Keychain/GUI acceptance must
+remain unverified unless covered in an approved isolated environment.
