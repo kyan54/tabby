@@ -18,7 +18,7 @@ test('bridge never invokes a secret-bearing process or reads password data', () 
 
 test('creation includes restrictive access atomically', () => {
     assert.match(source, /const void\* apps\[\] = \{host\.get\(\), cyberduck\.get\(\)\}/)
-    assert.match(source, /SecKeychainItemCreateFromContent\([\s\S]*?password, keychain\.get\(\), access\.get\(\), nullptr\)/)
+    assert.match(source, /SecKeychainItemCreateFromContent\([\s\S]*?password, keychain\.get\(\), access\.get\(\), item\.out\(\)\)/)
     assert.doesNotMatch(source, /SecKeychainAddInternetPassword\s*\(/)
     assert.match(source, /SecAccessCopyACLList\(access\.get\(\), acls\.out\(\)\)/)
     assert.match(source, /SecACLSetContents\(acl, owner \? hostOnly\.get\(\) : trusted\.get\(\)/)
