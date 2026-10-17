@@ -158,3 +158,20 @@ by itself satisfy the full release matrix. Normal Cyberduck startup consults SSH
 and proxy configuration; `.invalid` alone is not proof that the GUI cannot touch
 existing authentication state. Real lock/multiple-Keychain/GUI acceptance must
 remain unverified unless covered in an approved isolated environment.
+
+
+### Signed metadata-only preflight (no test account needed)
+
+After the candidate passes signature, stapling and Gatekeeper verification, run
+these from the repository directory with the candidate app's actual path:
+
+```sh
+ELECTRON_RUN_AS_NODE=1 "/path/to/Tabby.app/Contents/MacOS/Tabby" native/cyberduck-keychain/test/signed-preflight.cjs /Applications/Cyberduck.app
+ELECTRON_RUN_AS_NODE=1 "/path/to/Tabby.app/Contents/Frameworks/Tabby Helper (Renderer).app/Contents/MacOS/Tabby Helper (Renderer)" native/cyberduck-keychain/test/signed-preflight.cjs /Applications/Cyberduck.app
+```
+
+This checks the real signed executable, sealed addon and official target policy,
+then rejects invalid write/revoke tuples and checks Buffer erasure. It never
+queries or mutates credential items. Renderer-executable Node bootstrap is not a
+full GUI test. Do not change Electron fuses, entitlements or signature policy if
+the build does not support this mode; record that limitation instead.
