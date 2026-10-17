@@ -59,10 +59,12 @@ export class CyberduckService {
         if (!profile.id) {
             return
         }
-        if (resolveCyberduckSharing(enabled, this.config.store?.ssh?.cyberduckPasswordSharingDefault)) {
-            this.blockedProfiles.delete(profile.id)
-        } else {
+        if (enabled === false) {
             this.blockedProfiles.add(profile.id)
+        } else {
+            this.blockedProfiles.delete(profile.id)
+        }
+        if (!resolveCyberduckSharing(enabled, this.config.store?.ssh?.cyberduckPasswordSharingDefault)) {
             this.cancelPendingShares(profile.id)
         }
     }

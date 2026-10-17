@@ -348,6 +348,15 @@ describe('Cyberduck confirmed global default and explicit overrides', () => {
         await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
         assert.equal(f.writes.length, 1)
     })
+    it('following global while it is off does not leave a stale block after later global consent', async () => {
+        const f = sharingFixture()
+        f.service.setSharingEnabled(f.profile, false)
+        f.service.setSharingEnabled(f.profile, null)
+        f.adapter.showMessageBox = async () => ({ response: 1 })
+        await f.service.setGlobalSharingEnabled(true)
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'synthetic')
+        assert.equal(f.writes.length, 1)
+    })
     it('disabling global sharing clears queued buffers before discovery completes', async () => {
         const f = sharingFixture()
         delete f.profile.options.cyberduckPasswordSharing

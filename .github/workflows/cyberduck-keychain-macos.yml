@@ -1,4 +1,5 @@
 name: Cyberduck Keychain signed macOS candidate
+# Include the latest global-inheritance queue/cancellation regression in this candidate.
 
 on:
   workflow_dispatch:
