@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: macos-arm64-artifacts-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -61,7 +61,10 @@ jobs:
         id: signed_package
         continue-on-error: true
         if: env.HAS_MAC_SIGNING == 'true'
-        run: node scripts/build-macos.mjs 2>&1 | tee "$RUNNER_TEMP/keychain-package.log"
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/build-macos.mjs 2>&1 | tee "$RUNNER_TEMP/keychain-package.log"
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
