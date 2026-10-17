@@ -11,6 +11,7 @@ import { Socket } from 'net'
 import { Subject, Observable } from 'rxjs'
 import { HostKeyPromptModalComponent } from '../components/hostKeyPromptModal.component'
 import { PasswordStorageService } from '../services/passwordStorage.service'
+import { CyberduckService } from '../services/cyberduck.service'
 import { SSHKnownHostsService } from '../services/sshKnownHosts.service'
 import { SFTPSession } from './sftp'
 import { SSHAlgorithmType, SSHProfile, AutoPrivateKeyLocator, PortForwardType } from '../api'
@@ -451,6 +452,7 @@ export class SSHSession {
         this.ssh.disconnect$.subscribe(() => {
             if (!this.previouslyDisconnected) {
                 this.previouslyDisconnected = true
+                this.injector.get(CyberduckService).cancelPendingShares(this.profile.id)
                 // Let service messages drain
                 setTimeout(() => {
                     this.destroy()
@@ -653,6 +655,21 @@ export class SSHSession {
         }
     }
 
+    private shareAuthenticatedPassword (password: string): void {
+        if (this.hostApp.platform !== Platform.macOS || this.profile.options.cyberduckPasswordSharing !== true || !this.authUsername) {
+            return
+        }
+        try {
+            // No async frame retains this immutable password parameter. The service
+            // immediately creates a tracked mutable buffer and clears it on disposal.
+            this.injector.get(CyberduckService).shareAuthenticatedPassword(this.profile, this.authUsername, password, () => !this.previouslyDisconnected).catch(() => {
+                this.notifications.error(this.translate.instant('Could not share the SSH password with Cyberduck. Reconnect to try again.'))
+            })
+        } catch {
+            this.notifications.error(this.translate.instant('Could not share the SSH password with Cyberduck. Reconnect to try again.'))
+        }
+    }
+
     // eslint-disable-next-line max-statements
     private async _handleAuth (): Promise<russh.AuthenticatedSSHClient|null> {
         this.activePrivateKey = null
@@ -699,6 +716,7 @@ export class SSHSession {
                 this.emitServiceMessage(this.translate.instant('Using saved password'))
                 const result = await this.ssh.authenticateWithPassword(this.authUsername, method.password)
                 if (result instanceof russh.AuthenticatedSSHClient) {
+                    this.shareAuthenticatedPassword(method.password)
                     return result
                 }
                 updateAuthPlan(result)
@@ -721,6 +739,7 @@ export class SSHSession {
                         }
                         const result = await this.ssh.authenticateWithPassword(this.authUsername, promptResult.value)
                         if (result instanceof russh.AuthenticatedSSHClient) {
+                            this.shareAuthenticatedPassword(promptResult.value)
                             return result
                         }
                         updateAuthPlan(result)
@@ -872,6 +891,7 @@ export class SSHSession {
     }
 
     async destroy (): Promise<void> {
+        this.injector.get(CyberduckService).cancelPendingShares(this.profile.id)
         this.logger.info('Destroying')
         this.willDestroy.next()
         this.willDestroy.complete()

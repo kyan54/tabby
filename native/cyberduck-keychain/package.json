@@ -1,0 +1,7 @@
+{
+  "name": "tabby-cyberduck-keychain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "macOS-only in-process Security.framework bridge for signed Tabby",
+  "gypfile": true
+}

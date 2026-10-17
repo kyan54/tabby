@@ -13,14 +13,15 @@ const Platform = { macOS: 'mac', Windows: 'win', Linux: 'linux' }
 class SSHTabComponent { }
 const core = { Injectable: () => (x: any) => x, Platform, TabContextMenuItemProvider: class {} }
 const serviceExports: any = {}
-runInNewContext(transpile('../src/services/cyberduck.service.ts'), { exports: serviceExports, require: (name: string) => name === '@angular/core' ? core : name === '../cyberduck' ? { buildCyberduckURL, hasCyberduckRoutingRestriction } : core })
+runInNewContext(transpile('../src/services/cyberduck.service.ts'), { Buffer, URL, exports: serviceExports, require: (name: string) => name === '@angular/core' ? core : name === '../cyberduck' ? { buildCyberduckURL, hasCyberduckRoutingRestriction } : core })
 const menuExports: any = {}
 runInNewContext(transpile('../src/tabContextMenu.ts'), { exports: menuExports, require: (name: string) => name === './components/sshTab.component' ? { SSHTabComponent } : core })
 
 function fixture (platformName = Platform.macOS) {
     const calls: any[] = [], errors: string[] = [], dialogs: any[] = []
-    const adapter = {
+    const adapter: any = {
         getCyberduckPath: async () => '/Applications/Cyberduck.app',
+        validateCyberduckApplication: async () => true,
         exec: async (...args: any[]) => { calls.push(args) },
         showMessageBox: async (options: any) => { dialogs.push(options); return { response: 0 } },
     }
@@ -124,5 +125,167 @@ describe('SSH tab Cyberduck menu', () => {
         tab.sshSession.open = false
         items = await mac.getItems(tab)
         assert.equal(items[1].enabled, false)
+    })
+})
+
+function sharingFixture () {
+    const profile: any = { id: 'ssh:custom:test:fixture', options: { ...target, cyberduckPasswordSharing: true } }
+    const f = fixture()
+    const writes: any[] = [], revokes: any[] = []
+    let saved = profile
+    const adapter: any = f.adapter
+    adapter.shareCyberduckPassword = async (connection: any, bytes: Buffer, app: string) => {
+        writes.push({ connection, password: bytes.toString(), bytes, app })
+        return 'stored'
+    }
+    adapter.revokeCyberduckPassword = async (connection: any) => { revokes.push(connection); return 'revoked' }
+    const service = new serviceExports.CyberduckService({ platform: Platform.macOS }, adapter,
+        { error: (x: string) => f.errors.push(x) }, { instant: (x: string) => x },
+        { getProfiles: async () => saved ? [saved] : [], getConfigProxyForProfile: (x: any) => x,
+            writeProfile: async (x: any) => { saved = x } }, { save: async () => {} })
+    return { ...f, profile, service, writes, revokes, setSaved: (value: any) => { saved = value }, getSaved: () => saved }
+}
+
+describe('Cyberduck opt-in credential lifecycle (mocks only)', () => {
+    it('shares only explicitly opted-in persisted direct connections and uses the authenticated username', async () => {
+        const f = sharingFixture()
+        await f.service.shareAuthenticatedPassword(f.profile, 'actual-user', 'mock-password')
+        assert.equal(f.writes.length, 1)
+        assert.equal(f.writes[0].connection.username, 'actual-user')
+        assert.equal(f.writes[0].connection.host, 'example.invalid')
+        assert.equal(f.writes[0].connection.port, 22)
+        assert.equal(f.writes[0].password, 'mock-password')
+        assert.ok(f.writes[0].bytes.every((x: number) => x === 0))
+        for (const options of [{ cyberduckPasswordSharing: false }, { cyberduckPasswordSharing: undefined },
+            { jumpHost: 'other' }, { proxyCommand: 'proxy' }]) {
+            await f.service.shareAuthenticatedPassword({ ...f.profile, options: { ...f.profile.options, ...options } }, 'u', 'mock-password')
+        }
+        await f.service.shareAuthenticatedPassword({ ...f.profile, id: 'ssh:template' }, 'u', 'mock-password')
+        assert.equal(f.writes.length, 1)
+    })
+    it('does not treat an unsaved flag as consent or write after a profile is removed/changed', async () => {
+        const f = sharingFixture()
+        for (const saved of [null, { ...f.profile, options: { ...f.profile.options, cyberduckPasswordSharing: false } },
+            { ...f.profile, options: { ...f.profile.options, host: 'changed.invalid' } }]) {
+            f.setSaved(saved)
+            await f.service.shareAuthenticatedPassword(f.profile, 'u', 'mock-password')
+        }
+        assert.equal(f.writes.length, 0)
+    })
+    it('clears bytes and sanitizes a rejected platform write', async () => {
+        const f = sharingFixture()
+        let received: Buffer
+        f.adapter.shareCyberduckPassword = async (_target: any, bytes: Buffer) => { received = bytes; throw Error('mock-password') }
+        await f.service.shareAuthenticatedPassword(f.profile, 'u', 'mock-password')
+        assert.ok(received!.every(x => x === 0))
+        assert.equal(f.errors.length, 1)
+        assert.ok(!f.errors[0].includes('mock-password'))
+    })
+    it('cancels a pending share on disconnect or opt-out', async () => {
+        for (const reason of ['disconnect', 'disable']) {
+            const f = sharingFixture()
+            let resolve: (path: string) => void
+            let active = true
+            f.adapter.getCyberduckPath = () => new Promise<string>(r => { resolve = r })
+            const pending = f.service.shareAuthenticatedPassword(f.profile, 'u', 'mock-password', () => active)
+            await Promise.resolve()
+            if (reason === 'disconnect') active = false
+            else f.service.setSharingEnabled(f.profile, false)
+            resolve!('/Applications/Cyberduck.app')
+            await pending
+            assert.equal(f.writes.length, 0)
+        }
+    })
+    it('waits for authentication sharing before first Cyberduck launch', async () => {
+        const f = sharingFixture()
+        let resolve: (status: string) => void
+        f.adapter.shareCyberduckPassword = () => new Promise<string>(r => { resolve = r })
+        const pending = f.service.shareAuthenticatedPassword(f.profile, 'u', 'mock-password')
+        const launching = f.service.launch(f.profile, 'u', async () => '/', () => true)
+        for (let i = 0; i < 8; i++) await Promise.resolve()
+        assert.equal(f.calls.length, 0)
+        resolve!('stored')
+        await Promise.all([pending, launching])
+        assert.equal(f.calls.length, 1)
+        assert.ok(!JSON.stringify(f.calls).includes('mock-password'))
+    })
+    it('does not revoke on cancel, then revokes only its exact target and disables sharing', async () => {
+        const f = sharingFixture()
+        await f.service.revoke(f.profile)
+        assert.equal(f.revokes.length, 0)
+        assert.equal(f.profile.options.cyberduckPasswordSharing, true)
+        f.adapter.showMessageBox = async () => ({ response: 1 })
+        await f.service.revoke(f.profile)
+        assert.equal(f.revokes.length, 1)
+        assert.equal(f.revokes[0].ownerId, f.profile.id)
+        assert.equal(f.profile.options.cyberduckPasswordSharing, false)
+        // An already-open session has an old profile snapshot: it still cannot re-create it.
+        await f.service.shareAuthenticatedPassword({ ...f.profile, options: { ...f.profile.options, cyberduckPasswordSharing: true } }, 'u', 'mock-password')
+        assert.equal(f.writes.length, 0)
+    })
+    it('invalidates queued writes before an explicit revoke', async () => {
+        const f = sharingFixture()
+        let resolve: (path: string) => void
+        f.adapter.getCyberduckPath = () => new Promise<string>(r => { resolve = r })
+        const pending = f.service.shareAuthenticatedPassword(f.profile, 'u', 'mock-password')
+        await Promise.resolve()
+        f.adapter.showMessageBox = async () => ({ response: 1 })
+        const revoke = f.service.revoke(f.profile)
+        await Promise.resolve()
+        resolve!('/Applications/Cyberduck.app')
+        await Promise.all([pending, revoke])
+        assert.equal(f.writes.length, 0)
+        assert.equal(f.revokes.length, 1)
+    })
+})
+
+
+describe('Cyberduck cancellation and durable revocation', () => {
+    it('immediately erases pending bytes on session disposal or opt-out before discovery returns', async () => {
+        for (const mode of ['dispose', 'disable']) {
+            const f = sharingFixture()
+            let resolve: (path: string) => void
+            f.adapter.getCyberduckPath = () => new Promise<string>(r => { resolve = r })
+            const pending = f.service.shareAuthenticatedPassword(f.profile, 'u', 'mock-password')
+            const bytes = Array.from(f.service.pendingBytes.get(f.profile.id))[0] as Buffer
+            assert.equal(bytes.toString(), 'mock-password')
+            await Promise.resolve()
+            if (mode === 'dispose') f.service.cancelPendingShares(f.profile.id)
+            else f.service.setSharingEnabled(f.profile, false)
+            assert.ok(bytes.every(x => x === 0))
+            resolve!('/Applications/Cyberduck.app')
+            await pending
+            assert.equal(f.writes.length, 0)
+            assert.equal(f.service.pendingBytes.size, 0)
+            assert.equal(f.service.pendingShares.size, 0)
+        }
+    })
+    it('durably disables only the sharing flag when revoking from an unsaved editor', async () => {
+        const f = sharingFixture()
+        const original = structuredClone(f.profile)
+        f.setSaved(original)
+        f.adapter.showMessageBox = async (options: any) => {
+            assert.ok(options.detail.includes('profile-user@example.invalid:22'))
+            return { response: 1 }
+        }
+        f.profile.name = 'unsaved-name'
+        await f.service.revoke(f.profile)
+        assert.equal(f.getSaved().options.cyberduckPasswordSharing, false)
+        assert.equal(f.getSaved().name, undefined)
+        // Simulate a new service process, with no in-memory blocked IDs.
+        const restarted = sharingFixture()
+        restarted.setSaved(f.getSaved())
+        await restarted.service.shareAuthenticatedPassword(restarted.profile, 'u', 'mock-password')
+        assert.equal(restarted.writes.length, 0)
+    })
+    it('rejects changed configured usernames and does not open an unverified app', async () => {
+        const f = sharingFixture()
+        f.setSaved({ ...f.profile, options: { ...f.profile.options, user: 'changed-user' } })
+        await f.service.shareAuthenticatedPassword(f.profile, 'actual-user', 'mock-password')
+        assert.equal(f.writes.length, 0)
+        f.adapter.validateCyberduckApplication = async () => false
+        await f.service.launch(f.profile, 'u', async () => '/', () => true)
+        assert.equal(f.calls.length, 0)
+        assert.equal(f.errors.length, 1)
     })
 })

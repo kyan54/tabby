@@ -1,0 +1,226 @@
+name: Cyberduck Keychain signed macOS candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/cyberduck-keychain-opt-in]
+    paths: [.github/workflows/cyberduck-keychain-macos.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-arm64-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      ARCH: arm64
+      RUST_TARGET_TRIPLE: aarch64-apple-darwin
+      REV: ${{ github.run_id }}
+      HAS_MAC_SIGNING: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' }}
+      HAS_MAC_NOTARIZATION: ${{ secrets.APPLE_TEAM_ID != '' && secrets.APPSTORE_USERNAME != '' && secrets.APPSTORE_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Require existing signing and notarization
+        run: |
+          test "$HAS_MAC_SIGNING" = true
+          test "$HAS_MAC_NOTARIZATION" = true
+      - name: Verify Apple Silicon runner
+        run: |
+          test "$(uname -m)" = arm64
+          rustup target add aarch64-apple-darwin
+      - name: Install dependencies and rebuild native modules
+        run: |
+          corepack enable
+          yarn --frozen-lockfile --network-timeout 1000000
+      - name: Test, lint and build sources
+        run: |
+          yarn run test:ssh-term
+          yarn run test:unit
+          yarn run test:cyberduck-keychain
+          yarn run build:typings
+          yarn run lint
+          yarn run build
+      - name: Prepackage plugins
+        run: node scripts/prepackage-plugins.mjs
+      - name: Prepare Electron packaging
+        run: |
+          sed -i '' 's/updateInfo = await/\/\/updateInfo = await/g' node_modules/app-builder-lib/out/targets/ArchiveTarget.js
+          ln -s ../../node_modules/electron app/node_modules/electron
+          node scripts/prepare-staple-network-retry.mjs
+      - name: Build signed packages with existing credentials
+        id: signed_package
+        continue-on-error: true
+        if: env.HAS_MAC_SIGNING == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/build-macos.mjs 2>&1 | tee "$RUNNER_TEMP/keychain-package.log"
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ env.HAS_MAC_NOTARIZATION == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          APPSTORE_USERNAME: ${{ secrets.APPSTORE_USERNAME }}
+          APPSTORE_PASSWORD: ${{ secrets.APPSTORE_PASSWORD }}
+          USE_HARD_LINKS: false
+      - name: Build unsigned packages when no signing credentials exist
+        if: env.HAS_MAC_SIGNING != 'true'
+        run: node scripts/build-macos.mjs
+      - name: Preserve signed diagnostic app after CloudKit transport failure
+        id: diagnostic
+        if: steps.signed_package.outcome == 'failure'
+        shell: bash
+        run: |
+          rg -q 'Failed to staple your application with code: 68' "$RUNNER_TEMP/keychain-package.log"
+          rg -q 'NSURLErrorDomain Code=-1005' "$RUNNER_TEMP/keychain-package.log"
+          APP=dist/mac-arm64/Tabby.app
+          ADDON="$APP/Contents/Resources/cyberduck-keychain/cyberduck_keychain.node"
+          test "$(lipo -archs "$APP/Contents/MacOS/Tabby")" = arm64
+          codesign --verify --deep --strict "$APP"
+          codesign --verify --strict "$ADDON"
+          mkdir -p diagnostics
+          codesign -dv --verbose=2 "$APP" > diagnostics/APP_SIGNATURE.txt 2>&1
+          codesign -dv --verbose=2 "$ADDON" > diagnostics/ADDON_SIGNATURE.txt 2>&1
+          test "$(sed -n 's/^TeamIdentifier=//p' diagnostics/ADDON_SIGNATURE.txt)" = 37BL9CNF8B
+          ditto -c -k --keepParent "$APP" diagnostics/Tabby-keychain-SIGNED-NOT-STAPLED.zip
+          python3 - <<'PYDATA'
+          import json, os, pathlib
+          info = {'commit': os.environ['GITHUB_SHA'], 'architecture': 'arm64',
+                  'diagnostic_only': True, 'stapling_complete': False,
+                  'reason': 'Apple CloudKit ticket download transport failed',
+                  'instruction': 'Not an accepted installer. Verify/staple and complete native acceptance before use.'}
+          pathlib.Path('diagnostics/DIAGNOSTIC_INFO.json').write_text(json.dumps(info, indent=2) + '\n')
+          PYDATA
+          (cd diagnostics && shasum -a 256 *.zip > SHA256SUMS.txt)
+      - name: Upload explicitly incomplete signing diagnostics
+        if: always() && steps.diagnostic.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tabby-Keychain-DIAGNOSTIC-NOT-STAPLED-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: diagnostics/*
+      - name: Verify packages and record provenance
+        if: steps.signed_package.outcome == 'success'
+        run: |
+          APP=dist/mac-arm64/Tabby.app
+          test "$(lipo -archs "$APP/Contents/MacOS/Tabby")" = arm64
+          hdiutil verify dist/*.dmg
+          unzip -tq dist/*.zip
+          if [[ "$HAS_MAC_SIGNING" == true ]]; then
+            codesign --verify --deep --strict "$APP"
+          fi
+          ADDON="$APP/Contents/Resources/cyberduck-keychain/cyberduck_keychain.node"
+          test "$(lipo -archs "$ADDON")" = arm64
+          codesign --verify --strict "$ADDON"
+          codesign -dv --verbose=2 "$ADDON" > dist/KEYCHAIN_ADDON_SIGNATURE.txt 2>&1
+          test "$(sed -n 's/^TeamIdentifier=//p' dist/KEYCHAIN_ADDON_SIGNATURE.txt)" = 37BL9CNF8B
+          codesign -dv --verbose=2 "$APP" > dist/SIGNATURE_INFO.txt 2>&1 || true
+          if [[ "$HAS_MAC_SIGNING" == true && "$HAS_MAC_NOTARIZATION" == true ]]; then
+            xcrun stapler validate "$APP" >> dist/SIGNATURE_INFO.txt 2>&1
+          fi
+          shasum -a 256 dist/*.dmg | sed 's|dist/||' > dist/SHA256SUMS-dmg.txt
+          shasum -a 256 dist/*.zip | sed 's|dist/||' > dist/SHA256SUMS-zip.txt
+          python3 - <<'PY'
+          import json, os, pathlib, plistlib
+          root = pathlib.Path('dist')
+          app = root / 'mac-arm64/Tabby.app'
+          with (app / 'Contents/Info.plist').open('rb') as f:
+              info = plistlib.load(f)
+          manifest = {
+              'commit': os.environ['GITHUB_SHA'],
+              'run_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'architecture': 'arm64',
+              'candidate_only': True,
+              'keychain_acceptance': 'pending-isolated-user-validation',
+              'implementation_commit': '8bb17f915350dc61739e4b0ed9b8c57fa745bfce',
+              'version': info['CFBundleShortVersionString'],
+              'developer_id_signing_requested': os.environ['HAS_MAC_SIGNING'] == 'true',
+              'notarization_requested': os.environ['HAS_MAC_SIGNING'] == 'true' and os.environ['HAS_MAC_NOTARIZATION'] == 'true',
+              'files': [{'name': p.name, 'bytes': p.stat().st_size} for pattern in ('*.dmg', '*.zip') for p in root.glob(pattern)],
+          }
+          (root / 'BUILD_INFO.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+          cat dist/SHA256SUMS-dmg.txt dist/SHA256SUMS-zip.txt
+          cat dist/SIGNATURE_INFO.txt
+      - name: Read bootstrap fuse without changing security configuration
+        id: qa_bootstrap
+        if: steps.signed_package.outcome == 'success'
+        shell: bash
+        run: |
+          node --input-type=module - <<'JSFUSE'
+          import fs from 'node:fs'
+          import fuses from '@electron/fuses'
+          import { canBootstrapForQA } from './scripts/qa-bootstrap-policy.mjs'
+          const wire = await fuses.getCurrentFuseWire('dist/mac-arm64/Tabby.app')
+          const enabled = canBootstrapForQA(wire)
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${enabled}\n`)
+          const info = JSON.parse(fs.readFileSync('dist/BUILD_INFO.json', 'utf8'))
+          info.qa_bootstrap_available = enabled
+          info.native_runtime_acceptance = 'pending-user-controlled-GUI-and-Keychain-validation'
+          fs.writeFileSync('dist/BUILD_INFO.json', JSON.stringify(info, null, 2) + '\n')
+          console.log(enabled ? 'Read-only Node-bootstrap smoke test is available.' : 'RunAsNode disabled: no application bootstrap attempted; runtime remains unverified.')
+          JSFUSE
+      - name: Load sealed native module in signed app without Keychain access
+        if: steps.signed_package.outcome == 'success' && steps.qa_bootstrap.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/keychain-safe-load.cjs" <<'JS'
+          const assert = require('node:assert/strict')
+          const addon = require(process.argv[2])
+          const bytes = Buffer.from('NON_AUTHENTICATING_TEST_SENTINEL')
+          assert.equal(addon.write('', 0, '', bytes, '/nonexistent.app', 'invalid'), 'invalid')
+          assert.ok(bytes.every(x => x === 0))
+          assert.equal(addon.validateTarget('/nonexistent.app'), false)
+          console.log('Signed app loaded sealed addon; invalid input rejected; no credential lookup or mutation attempted.')
+          JS
+          python3 - <<'PYRUN'
+          import os, subprocess
+          subprocess.run(['dist/mac-arm64/Tabby.app/Contents/MacOS/Tabby',
+              os.environ['RUNNER_TEMP'] + '/keychain-safe-load.cjs',
+              os.environ['GITHUB_WORKSPACE'] + '/dist/mac-arm64/Tabby.app/Contents/Resources/cyberduck-keychain/cyberduck_keychain.node'],
+              env={**os.environ, 'ELECTRON_RUN_AS_NODE': '1'}, timeout=45, check=True)
+          PYRUN
+      - name: Upload arm64 DMG and verification
+        if: steps.signed_package.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tabby-Keychain-CANDIDATE-arm64-dmg-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            dist/*.dmg
+            dist/SHA256SUMS-dmg.txt
+            dist/BUILD_INFO.json
+            dist/SIGNATURE_INFO.txt
+            dist/KEYCHAIN_ADDON_SIGNATURE.txt
+      - name: Upload arm64 ZIP and verification
+        if: steps.signed_package.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tabby-Keychain-CANDIDATE-arm64-zip-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS-zip.txt
+            dist/BUILD_INFO.json
+            dist/SIGNATURE_INFO.txt
+            dist/KEYCHAIN_ADDON_SIGNATURE.txt
+
+      - name: Keep incomplete notarization a failed build
+        if: always()
+        run: test "${{ steps.signed_package.outcome }}" = success

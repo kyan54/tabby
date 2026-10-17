@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { build as builder } from 'electron-builder'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import * as vars from './vars.mjs'
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
@@ -15,6 +17,14 @@ if (process.env.GITHUB_HEAD_REF) {
 
 process.env.APPLE_ID ??= process.env.APPSTORE_USERNAME
 process.env.APPLE_APP_SPECIFIC_PASSWORD ??= process.env.APPSTORE_PASSWORD
+
+// Signing-step public team metadata is not available during dependency install.
+// Rebuild now so the addon pin matches the packaged app; unsigned builds remain disabled.
+execFileSync(process.execPath, [
+    fileURLToPath(new URL('../native/cyberduck-keychain/build.mjs', import.meta.url)),
+    '--electron-version', vars.electronVersion,
+    '--arch', process.env.ARCH,
+], { stdio: 'inherit' })
 
 builder({
     dir: true,
