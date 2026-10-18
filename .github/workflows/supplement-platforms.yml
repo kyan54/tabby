@@ -294,7 +294,7 @@ jobs:
 
           rustup target add $env:RUST_TARGET_TRIPLE
 
-          npm install --global yarn node-gyp
+          npm install --global yarn@1.22.22 node-gyp@13.0.2
       - name: Download Visual C++ Redistributable
         shell: bash
         run: |
@@ -307,14 +307,12 @@ jobs:
       - name: Build UAC helper
         shell: pwsh
         run: '& ../control/scripts/supplement/uac.ps1'
+      - name: Configure native Windows build toolchain
+        shell: pwsh
+        run: '& ../control/scripts/supplement/windows-toolchain.ps1'
       - name: Install, test and compile fixed source
         shell: pwsh
-        run: |-
-          yarn --frozen-lockfile --network-timeout 1000000
-          yarn run test:ssh-term
-          yarn run test:unit
-          yarn run build
-          node scripts/prepackage-plugins.mjs
+        run: node ../control/scripts/supplement/windows-compile.cjs
       - name: Decode existing signing certificate if configured
         if: env.HAS_WINDOWS_SIGNING == 'true'
         shell: pwsh
