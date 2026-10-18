@@ -1,4 +1,8 @@
 {
   "version": "1.0.238-fix",
-  "tag": "v1.0.238-fix"
+  "tag": "v1.0.238-fix",
+  "replacement": {
+    "expected_tag_sha": "397fb222140945569a4055447ef072ca57c44db7",
+    "expected_release_id": 416398939
+  }
 }

@@ -29,7 +29,7 @@ platforms for this fork are stated in each release's notes.
 
 Download this fork from [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
 
-### Unreleased — header-only SFTP sorting
+### v1.0.238-fix — rebuilt with header-only SFTP sorting
 
 The Advanced sorting entry and editor have been removed without changing the
 native file list. Click Name, Size or Modified to cycle ascending → descending →
@@ -40,7 +40,9 @@ Old Type rules have no visible header, so they are filtered out on load. Other
 rules retain their order and direction; a Type-only choice becomes sorting off.
 Opening a panel does not rewrite config. The next header interaction saves only
 visible rules and leaves the directory-priority preference unchanged.
-No new installer has been published for this change.
+This rebuild replaces the previously published assets under the same tag after
+verification and explicit confirmation. Check SHA256SUMS.txt and BUILD_INFO.json
+to distinguish it from cached copies of the earlier package.
 
 ### v1.0.238-fix — three-state SFTP sorting
 

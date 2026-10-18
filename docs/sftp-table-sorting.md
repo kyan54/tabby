@@ -52,4 +52,5 @@ become explicit off in memory. Merely opening a panel does not rewrite the user
 configuration. The next header action persists visible rules and updates only
 the legacy primary-rule mirrors, preserving directoriesFirst and other settings.
 Unconfigured users still default to name ascending; explicit [] remains off.
-The published v1.0.238-fix assets and tag are unchanged by this unreleased change.
+The confirmed v1.0.238-fix rebuild replaces the earlier package only after the
+signed artifacts pass validation; release notes record old/new source commits.

@@ -37,15 +37,60 @@ async function publish ({ github, context, core, directory, metadata, notes }) {
     if (master.data.object.sha !== sha) throw new Error('Master moved; do not publish a stale build')
     let tag
     try { tag = await github.rest.git.getRef({ owner, repo, ref: `tags/${metadata.tag}` }) } catch (error) { if (error.status !== 404) throw error }
-    if (tag && tag.data.object.sha !== sha) throw new Error('Tag already targets another commit')
-    if (!tag) await github.rest.git.createRef({ owner, repo, ref: `refs/tags/${metadata.tag}`, sha })
     let release
     try { release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag: metadata.tag })).data } catch (error) { if (error.status !== 404) throw error }
+    const replacement = metadata.replacement
+    if (replacement) {
+        if (metadata.tag !== 'v1.0.238-fix' || metadata.version !== '1.0.238-fix' ||
+            !/^[a-f0-9]{40}$/.test(replacement.expected_tag_sha) || replacement.expected_tag_sha === sha ||
+            !Number.isSafeInteger(replacement.expected_release_id) || replacement.expected_release_id <= 0) {
+            throw new Error('Invalid exact replacement authorization')
+        }
+        const oldTag = tag?.data.object.sha === replacement.expected_tag_sha
+        const oldRelease = release?.id === replacement.expected_release_id && !release.draft
+        const newDraft = release?.draft && release.target_commitish === sha
+        const newPublic = release && !release.draft && release.id !== replacement.expected_release_id && release.target_commitish === sha
+        // Validate every existing identity before deleting anything. Missing old
+        // objects permit recovery after an interrupted, already-authorized cutover.
+        if ((tag && !oldTag && tag.data.object.sha !== sha) ||
+            (release && !oldRelease && !newDraft && !newPublic) || (oldRelease && !oldTag)) {
+            throw new Error('Replacement target changed; preserve existing release and tag')
+        }
+        if (newPublic) {
+            const uploaded = (await github.rest.repos.listReleaseAssets({ owner, repo, release_id: release.id, per_page: 100 })).data
+            if (oldTag || !tag || release.name !== metadata.tag || release.prerelease || uploaded.length !== assets.length ||
+                !assets.every(name => uploaded.some(asset => asset.name === name &&
+                    asset.size === fs.statSync(path.join(directory, name)).size && asset.digest === 'sha256:' +
+                    crypto.createHash('sha256').update(fs.readFileSync(path.join(directory, name))).digest('hex')))) {
+                throw new Error('Published replacement does not match verified artifacts; do not mutate')
+            }
+            core.notice(`Replacement already published: ${release.html_url}`)
+            return release
+        }
+        if ((await github.rest.git.getRef({ owner, repo, ref: 'heads/master' })).data.object.sha !== sha) throw new Error('Master moved; preserve old release')
+        if (oldTag && (await github.rest.git.getRef({ owner, repo, ref: `tags/${metadata.tag}` })).data.object.sha !== replacement.expected_tag_sha) throw new Error('Old tag moved; preserve old release')
+        fs.writeFileSync(path.join(directory, 'REPLACEMENT_AUDIT.json'), JSON.stringify({
+            tag: metadata.tag, old_tag_sha: replacement.expected_tag_sha, new_tag_sha: sha,
+            old_release_id: replacement.expected_release_id, run_id: context.runId,
+            verified_assets: assets, verified_before_cutover: true,
+        }, null, 2) + '\n')
+        core.notice(`Verified replacement ${metadata.tag}: old ${replacement.expected_tag_sha}, new ${sha}, old release ${replacement.expected_release_id}`)
+        if (oldRelease) {
+            await github.rest.repos.deleteRelease({ owner, repo, release_id: replacement.expected_release_id })
+            release = null
+        }
+        if (oldTag) {
+            await github.rest.git.deleteRef({ owner, repo, ref: `tags/${metadata.tag}` })
+            tag = null
+        }
+    }
+    if (tag && tag.data.object.sha !== sha) throw new Error('Tag already targets another commit')
     if (release && (!release.draft || release.target_commitish !== sha)) throw new Error('Refuse to mutate an unrelated or published release')
+    if (!tag) await github.rest.git.createRef({ owner, repo, ref: `refs/tags/${metadata.tag}`, sha })
     const body = notes.replaceAll('{{VERSION}}', metadata.version).replaceAll('{{SHA}}', sha)
         .replaceAll('{{RUN_URL}}', `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`)
     if (!release) release = (await github.rest.repos.createRelease({ owner, repo, tag_name: metadata.tag,
-        target_commitish: sha, name: `Tabby ${metadata.version} · 原生 SFTP 表头排序 · macOS arm64`, body, draft: true, prerelease: false })).data
+        target_commitish: sha, name: metadata.tag, body, draft: true, prerelease: false })).data
     const existing = (await github.rest.repos.listReleaseAssets({ owner, repo, release_id: release.id, per_page: 100 })).data
     for (const name of assets) {
         const old = existing.find(asset => asset.name === name)
@@ -56,10 +101,11 @@ async function publish ({ github, context, core, directory, metadata, notes }) {
     }
     const uploaded = (await github.rest.repos.listReleaseAssets({ owner, repo, release_id: release.id, per_page: 100 })).data
     if (uploaded.length !== assets.length || !assets.every(name => uploaded.some(asset => asset.name === name &&
-        asset.size === fs.statSync(path.join(directory, name)).size))) throw new Error('Release asset verification failed; keep draft')
+        asset.size === fs.statSync(path.join(directory, name)).size && asset.digest === 'sha256:' +
+        crypto.createHash('sha256').update(fs.readFileSync(path.join(directory, name))).digest('hex')))) throw new Error('Release asset verification failed; keep draft')
     // Recheck immediately before publication. Never advance a tag or overwrite master.
     if ((await github.rest.git.getRef({ owner, repo, ref: 'heads/master' })).data.object.sha !== sha) throw new Error('Master moved; keep draft')
-    const result = await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, body, draft: false, prerelease: false, make_latest: 'true' })
+    const result = await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, name: metadata.tag, body, draft: false, prerelease: false, make_latest: 'true' })
     core.notice(`Published ${result.data.html_url}`)
     return result.data
 }
