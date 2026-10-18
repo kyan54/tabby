@@ -104,3 +104,24 @@ test('final collection reuses exact four recovery runs and never schedules anoth
  assert.match(source,/artifacts.some/);assert.match(source,/Collect current and previously validated producer artifacts/)
  assert.doesNotMatch(source,/build-linux|build-macos|build-windows|yarn run build|deleteRelease|updateRef/)
 })
+
+test('real node-gyp-build 4.6 launcher uses Node JS entry with node-gyp 13 string bin metadata',()=>{
+ const vm=require('node:vm'),{normalize}=require('./windows-gyp-compat.cjs')
+ const source=fs.readFileSync(path.join(__dirname,'fixtures/node-gyp-build-4.6.cjs'),'utf8')
+ function launch(compat){
+  let captured
+  const manifest={name:'node-gyp',version:'13.0.2',bin:'./bin/node-gyp.js'}
+  const req=name=>{
+   if(name==='child_process')return {spawn:(exe,args)=>{captured={exe,args};return {on:()=>{}}}}
+   if(name==='os')return {platform:()=> 'win32'}
+   if(name==='path')return path
+   if(name==='node-gyp/package.json')return compat?normalize(name,manifest):manifest
+   throw Error('Unexpected launcher dependency: '+name)
+  }
+  req.resolve=()=>path.join('/fixture/node-gyp','package.json')
+  vm.runInNewContext(source,{require:req,process:{execPath:'/fixture/node.exe',env:{npm_config_build_from_source:'true'},argv:['node','bin.js']},console})
+  assert.equal(manifest.bin,'./bin/node-gyp.js');return captured
+ }
+ assert.equal(launch(false).exe,'node-gyp.cmd')
+ assert.deepEqual(JSON.parse(JSON.stringify(launch(true))),{exe:'/fixture/node.exe',args:[path.join('/fixture/node-gyp','bin/node-gyp.js'),'rebuild']})
+})
