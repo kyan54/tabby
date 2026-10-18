@@ -1,0 +1,466 @@
+name: Supplement existing v1.0.238-fix platforms
+'on':
+  workflow_dispatch: null
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/supplement-platforms.yml
+permissions:
+  contents: read
+concurrency:
+  group: supplement-v1.0.238-fix
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: master
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Test append-only safety boundaries
+        run: node --test scripts/supplement/policy.test.cjs
+      - uses: actions/github-script@v7
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').preflight(github, context)
+  macos:
+    needs: preflight
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            arch: x86_64
+    defaults:
+      run:
+        working-directory: source
+    env:
+      TABBY_RELEASE_VERSION: 1.0.238-fix
+      KEYGEN_TOKEN: ''
+      GITHUB_TOKEN: ''
+      USE_HARD_LINKS: 'false'
+      ARCH: x64
+      RUST_TARGET_TRIPLE: x86_64-apple-darwin
+      HAS_MAC_SIGNING: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' }}
+      HAS_MAC_NOTARIZATION: ${{ secrets.APPLE_TEAM_ID != '' && secrets.APPSTORE_USERNAME != '' && secrets.APPSTORE_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          ref: master
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: b72b9b6e2feb7b5e352afd6b47c2f41fce3bfcf1
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Require Intel and existing signing configuration
+        run: |-
+          test "$(uname -m)" = x86_64
+          test "$HAS_MAC_SIGNING" = true
+          test "$HAS_MAC_NOTARIZATION" = true
+          rustup target add x86_64-apple-darwin
+      - name: Install, test and compile fixed source
+        run: |-
+          corepack enable
+          yarn --frozen-lockfile --network-timeout 1000000
+          yarn run test:ssh-term
+          yarn run test:unit
+          yarn run build
+          node scripts/prepackage-plugins.mjs
+      - name: Prepare and sign Intel packages
+        run: |-
+          sed -i '' 's/updateInfo = await/\/\/updateInfo = await/g' node_modules/app-builder-lib/out/targets/ArchiveTarget.js
+          ln -s ../../node_modules/electron app/node_modules/electron
+          node scripts/build-macos.mjs
+        env:
+          ARCH: x86_64
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPSTORE_USERNAME: ${{ secrets.APPSTORE_USERNAME }}
+          APPSTORE_PASSWORD: ${{ secrets.APPSTORE_PASSWORD }}
+          USE_HARD_LINKS: 'false'
+      - name: Verify signed and notarized actual packages
+        run: |-
+          APP=dist/mac/Tabby.app
+          test "$(lipo -archs "$APP/Contents/MacOS/Tabby")" = x86_64
+          codesign --verify --deep --strict "$APP"
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
+          hdiutil verify dist/*.dmg
+          unzip -tq dist/*.zip
+          mkdir -p /tmp/tabby-intel-dmg
+          hdiutil attach -readonly -nobrowse -mountpoint /tmp/tabby-intel-dmg dist/*.dmg
+          trap 'hdiutil detach /tmp/tabby-intel-dmg' EXIT
+          codesign --verify --deep --strict /tmp/tabby-intel-dmg/Tabby.app
+          xcrun stapler validate /tmp/tabby-intel-dmg/Tabby.app
+          spctl --assess --type execute --verbose=2 /tmp/tabby-intel-dmg/Tabby.app
+          node ../control/scripts/supplement/check.cjs macos x86_64
+      - name: Upload verified products only
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplement-${{ matrix.platform }}-${{ matrix.arch }}
+          path: source/supplement-output/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+  linux:
+    needs: preflight
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: x64
+            os: ubuntu-24.04
+            rust: x86_64-unknown-linux-gnu
+          - platform: linux
+            arch: arm64
+            os: ubuntu-24.04-arm
+            rust: aarch64-unknown-linux-gnu
+    defaults:
+      run:
+        working-directory: source
+    env:
+      TABBY_RELEASE_VERSION: 1.0.238-fix
+      KEYGEN_TOKEN: ''
+      GITHUB_TOKEN: ''
+      USE_HARD_LINKS: 'false'
+      ARCH: ${{ matrix.arch }}
+      RUST_TARGET_TRIPLE: ${{ matrix.rust }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          ref: master
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: b72b9b6e2feb7b5e352afd6b47c2f41fce3bfcf1
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Install standard runner build dependencies
+        run: >-
+          sudo apt-get update
+
+          sudo apt-get install -y libfontconfig1-dev libsecret-1-dev libarchive-tools zsh ruby-dev rpm cpio xvfb xauth libgtk-3-0 libnss3 libgbm1
+          libasound2t64
+
+          sudo gem install fpm --no-document
+
+          rustup target add $RUST_TARGET_TRIPLE
+      - name: Install, test and compile fixed source
+        run: |-
+          corepack enable
+          yarn --frozen-lockfile --network-timeout 1000000
+          yarn run test:ssh-term
+          yarn run test:unit
+          yarn run build
+          node scripts/prepackage-plugins.mjs
+      - name: Build packages without any external publisher
+        run: node scripts/build-linux.mjs
+        env:
+          USE_SYSTEM_FPM: 'true'
+          USE_HARD_LINKS: 'false'
+      - name: Build Web bundle on x64 only
+        if: matrix.arch == 'x64'
+        run: zsh -c 'tar czf tabby-web.tar.gz (tabby-*|web)/dist'
+      - name: Validate package formats, architecture, embedded version and native CLI
+        run: node ../control/scripts/supplement/check.cjs linux $ARCH
+      - name: Upload verified products only
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplement-${{ matrix.platform }}-${{ matrix.arch }}
+          path: source/supplement-output/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+  armv7:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: armv7l
+    defaults:
+      run:
+        working-directory: source
+    env:
+      TABBY_RELEASE_VERSION: 1.0.238-fix
+      KEYGEN_TOKEN: ''
+      GITHUB_TOKEN: ''
+      USE_HARD_LINKS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          ref: master
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: b72b9b6e2feb7b5e352afd6b47c2f41fce3bfcf1
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      - name: Build and smoke-test ARMv7 under QEMU
+        run: |-
+          docker run --rm --platform linux/arm/v7 -v "$GITHUB_WORKSPACE:/work" -w /work/source \
+           -e ARCH=armv7l -e TABBY_RELEASE_VERSION=1.0.238-fix -e RUST_TARGET_TRIPLE=armv7-unknown-linux-gnueabihf \
+           -e USE_HARD_LINKS=false -e KEYGEN_TOKEN= -e GITHUB_TOKEN= node:22-bookworm bash /work/control/scripts/supplement/armv7.sh
+      - name: Upload verified products only
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplement-${{ matrix.platform }}-${{ matrix.arch }}
+          path: source/supplement-output/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+  windows:
+    needs: preflight
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            arch: x64
+            os: windows-2022
+            rust: x86_64-pc-windows-msvc
+          - platform: windows
+            arch: arm64
+            os: windows-11-arm
+            rust: aarch64-pc-windows-msvc
+    defaults:
+      run:
+        working-directory: source
+    env:
+      TABBY_RELEASE_VERSION: 1.0.238-fix
+      KEYGEN_TOKEN: ''
+      GITHUB_TOKEN: ''
+      USE_HARD_LINKS: 'false'
+      ARCH: ${{ matrix.arch }}
+      RUST_TARGET_TRIPLE: ${{ matrix.rust }}
+      HAS_WINDOWS_SIGNING: >-
+        ${{ secrets.SM_CLIENT_CERT_FILE_B64 != '' && secrets.SM_CLIENT_CERT_PASSWORD != '' && secrets.SM_PUBLISHER_NAME != '' && secrets.SM_API_KEY !=
+        '' && vars.SM_CODE_SIGNING_CERT_SHA1_HASH != '' && vars.SM_KEYPAIR_ALIAS != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          ref: master
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: b72b9b6e2feb7b5e352afd6b47c2f41fce3bfcf1
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Verify native runner and signing configuration presence
+        shell: pwsh
+        run: >-
+          if ($env:PROCESSOR_ARCHITECTURE -ne ('${{ matrix.arch }}' -replace '^x64$','AMD64')) { if ('${{ matrix.arch }}' -ne 'arm64' -or
+          $env:PROCESSOR_ARCHITECTURE -ne 'ARM64') { throw 'Wrong runner architecture' } }
+
+          Write-Output "Windows signing configuration present: $env:HAS_WINDOWS_SIGNING"
+
+          rustup target add $env:RUST_TARGET_TRIPLE
+
+          npm install --global yarn node-gyp
+      - name: Download Visual C++ Redistributable
+        shell: bash
+        run: |
+          if [ "$ARCH" = "arm64" ]; then
+            curl -sSL -o build/vc_redist.exe "https://aka.ms/vs/17/release/vc_redist.arm64.exe"
+          else
+            curl -sSL -o build/vc_redist.exe "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          fi
+          ls -la build/vc_redist.exe
+      - name: Build UAC helper
+        shell: powershell
+        run: |
+          # extras/UAC.exe used to be a checked-in prebuilt, so source fixes never shipped.
+          # The solution has no ARM64 config; the x64 binary runs under emulation on ARM64.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild not found" }
+
+          # The project pins VS2017 (v141) and SDK 10.0.17763; retarget to whatever the runner has.
+          & $msbuild tabby-uac\UAC.sln `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:PlatformToolset=v143 `
+            /p:WindowsTargetPlatformVersion=10.0 `
+            /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { throw "UAC build failed" }
+
+          # don't hardcode MSBuild's output layout
+          $built = Get-ChildItem tabby-uac -Recurse -Filter UAC.exe |
+            Where-Object { $_.FullName -match '\\Release\\' } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $built) { throw "UAC.exe not found after build" }
+          Copy-Item $built.FullName extras\UAC.exe -Force
+          Get-Item extras\UAC.exe | Format-List FullName, Length, LastWriteTime
+      - name: Install, test and compile fixed source
+        shell: pwsh
+        run: |-
+          yarn --frozen-lockfile --network-timeout 1000000
+          yarn run test:ssh-term
+          yarn run test:unit
+          yarn run build
+          node scripts/prepackage-plugins.mjs
+      - name: Decode existing signing certificate if configured
+        if: env.HAS_WINDOWS_SIGNING == 'true'
+        shell: pwsh
+        env:
+          CERT_DATA: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
+        run: |-
+          $p = Join-Path $env:RUNNER_TEMP 'supplement-signing.p12'
+          [IO.File]::WriteAllBytes($p,[Convert]::FromBase64String($env:CERT_DATA))
+          "SM_CLIENT_CERT_FILE=$p" | Out-File -Append $env:GITHUB_ENV
+      - name: Configure existing signing client if available
+        if: env.HAS_WINDOWS_SIGNING == 'true'
+        uses: digicert/code-signing-software-trust-action@cb502242630f8556eb815a4f9c1e8c64d2a2d2a3
+        env:
+          SM_HOST: ${{ vars.SM_HOST }}
+          SM_API_KEY: ${{ secrets.SM_API_KEY }}
+          SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
+      - name: Build Windows packages with explicit signing status
+        shell: pwsh
+        env:
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
+          SM_API_KEY: ${{ secrets.SM_API_KEY }}
+          SM_HOST: ${{ vars.SM_HOST }}
+          SM_PUBLISHER_NAME: ${{ secrets.SM_PUBLISHER_NAME }}
+          SM_KEYPAIR_ALIAS: ${{ vars.SM_KEYPAIR_ALIAS }}
+          SM_CODE_SIGNING_CERT_SHA1_HASH: ${{ vars.SM_CODE_SIGNING_CERT_SHA1_HASH }}
+          SM_LOG_LEVEL: ERROR
+          USE_HARD_LINKS: 'false'
+        run: |-
+          if ($env:HAS_WINDOWS_SIGNING -eq 'true') {
+            smksp_cert_sync.exe
+            $env:WIN_CSC_LINK=$env:SM_CLIENT_CERT_FILE
+            $env:WIN_CSC_KEY_PASSWORD=$env:SM_CLIENT_CERT_PASSWORD
+          } else {
+            Remove-Item Env:SM_KEYPAIR_ALIAS -ErrorAction SilentlyContinue
+            $env:CSC_IDENTITY_AUTO_DISCOVERY='false'
+          }
+          node scripts/build-windows.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package build failed' }
+      - name: Add VC Runtime to portable zip
+        shell: powershell
+        env:
+          ARCH: ${{matrix.arch}}
+        run: >
+          # Copy VC Runtime DLLs from Visual Studio
+
+          mkdir "vc-runtime" -Force | Out-Null
+
+
+          $arch = if ("$env:ARCH" -eq "x64") { "x64" } else { "arm64" }
+
+          $crtDir = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\$arch\Microsoft.VC*.CRT" -Directory -ErrorAction
+          SilentlyContinue | Select-Object -First 1
+
+          if ($crtDir) {
+            @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll") | ForEach-Object {
+              $src = Join-Path $crtDir.FullName $_
+              if (Test-Path $src) {
+                Copy-Item $src "vc-runtime/"
+                Write-Host "Copied $_ from $src"
+              }
+            }
+          }
+
+
+          # Add VC Runtime DLLs to portable zip
+
+          $portableZip = Get-ChildItem dist/*-portable-*.zip | Select-Object -First 1
+
+          if ($portableZip) {
+            Add-Type -AssemblyName System.IO.Compression
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+            # Open zip in update mode and add DLL files
+            $zip = [System.IO.Compression.ZipFile]::Open($portableZip.FullName, [System.IO.Compression.ZipArchiveMode]::Update)
+            Get-ChildItem "vc-runtime" -Filter "*.dll" | ForEach-Object {
+              [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $_.Name) | Out-Null
+              Write-Host "Added $($_.Name) to portable zip"
+            }
+            $zip.Dispose()
+            Write-Host "Portable zip updated with VC Runtime"
+          }
+      - name: Check Authenticode honestly and validate packages
+        shell: pwsh
+        run: |-
+          $app = if ('${{ matrix.arch }}' -eq 'arm64') { 'dist/win-arm64-unpacked/Tabby.exe' } else { 'dist/win-unpacked/Tabby.exe' }
+          $setup = Get-ChildItem dist/*-setup-*.exe | Select-Object -First 1
+          if ($env:HAS_WINDOWS_SIGNING -eq 'true') {
+           foreach ($p in @($app,$setup.FullName)) { if ((Get-AuthenticodeSignature $p).Status -ne 'Valid') { throw "Invalid Authenticode signature: $p" } }
+           $env:WINDOWS_SIGNED='true'
+          } else { $env:WINDOWS_SIGNED='false'; Write-Output 'UNSIGNED Windows packages; no system policy or warning suppression applied' }
+          node ../control/scripts/supplement/check.cjs windows $env:ARCH
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact validation failed' }
+      - name: Upload verified products only
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplement-${{ matrix.platform }}-${{ matrix.arch }}
+          path: source/supplement-output/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+  append:
+    needs:
+      - macos
+      - linux
+      - armv7
+      - windows
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: master
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: supplement-*
+          path: additional
+          merge-multiple: true
+      - name: Append only verified missing assets to the existing release
+        uses: actions/github-script@v7
+        with:
+          script: >-
+            await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').publish({github, context, core,
+            directory:process.env.GITHUB_WORKSPACE+'/additional'})
