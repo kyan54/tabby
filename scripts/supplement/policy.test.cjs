@@ -164,3 +164,23 @@ test('ARMv7 recovery checkpoints compiled natives before packaging and retains f
  const prepare=fs.readFileSync(path.join(__dirname,'armv7.sh'),'utf8');assert.match(prepare,/git diff --exit-code/);assert.match(prepare,/check.cjs linux armv7l/)
  assert.match(prepare,/reuse-frontend.cjs/);assert.doesNotMatch(prepare,/git reset|git checkout.*--|yarn run build/)
 })
+
+test('frontend ZIP extraction ignores dependency symlinks and rejects links in portable inputs',()=>{
+ const cp=require('node:child_process'),root=fs.mkdtempSync(path.join(os.tmpdir(),'frontend-zip-'))
+ try{
+  const script=String.raw`import importlib.util,pathlib,stat,sys,zipfile
+root=pathlib.Path(sys.argv[1]);spec=importlib.util.spec_from_file_location('extractor',sys.argv[2]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+def create(file,unsafe=False):
+ with zipfile.ZipFile(file,'w') as z:
+  z.writestr('Tabby.app/Contents/Resources/app.asar','archive-fixture')
+  z.writestr('Tabby.app/Contents/Resources/builtin-plugins/tabby-ssh/dist/index.js','serverFileList')
+  link=zipfile.ZipInfo('Tabby.app/Contents/Resources/builtin-plugins/tabby-ssh/'+('dist/link.js' if unsafe else 'node_modules/.bin/ipv6'));link.external_attr=(stat.S_IFLNK|0o777)<<16;z.writestr(link,'../ipv6/bin/ipv6.js')
+create(root/'good.zip');module.extract(root/'good.zip',root/'out');assert not (root/'out/Tabby.app/Contents/Resources/builtin-plugins/tabby-ssh/node_modules').exists()
+create(root/'bad.zip',True)
+try: module.extract(root/'bad.zip',root/'bad-out')
+except ValueError as e: assert 'symlink' in str(e)
+else: raise AssertionError('Allowed frontend symlink')
+`
+  cp.execFileSync('python3',['-c',script,root,path.join(__dirname,'extract-frontend.py')],{stdio:'pipe'})
+ }finally{fs.rmSync(root,{recursive:true,force:true})}
+})
