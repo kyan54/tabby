@@ -26,4 +26,13 @@ function assertIdentity (release,tagSHA) {
  for(const old of original){const a=release.assets.find(x=>x.name===old.name);if(!a||a.id!==old.id||a.size!==old.size||a.digest!=='sha256:'+old.sha256)throw Error('Original release asset changed: '+old.name)}
  if(release.assets.some(x=>!original.some(o=>o.name===x.name)&&![...products,...metadata].includes(x.name)))throw Error('Unexpected release asset; stop')
 }
-module.exports={VERSION,SOURCE,RELEASE_ID,TAG,original,matrix,namesFor,products,metadata,assertIdentity}
+function selectedNative(file,platform,arch){
+ const normalized=file.replace(/\\/g,'/'),base=normalized.split('/').pop()
+ const nativePlatform=platform==='macos'?'darwin':platform==='windows'?'win32':'linux'
+ const nativeArch=arch==='x86_64'?'x64':arch==='armv7l'?'arm':arch
+ const prefix=`russh.${nativePlatform}-${nativeArch}`
+ if(base.startsWith('russh.'))return base.startsWith(prefix+'.')||base.startsWith(prefix+'-')
+ if(normalized.includes('/node-pty/prebuilds/'))return normalized.includes(`/node-pty/prebuilds/${nativePlatform}-${nativeArch}/`)
+ return true
+}
+module.exports={VERSION,SOURCE,RELEASE_ID,TAG,original,matrix,namesFor,products,metadata,assertIdentity,selectedNative}

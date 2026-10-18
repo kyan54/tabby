@@ -11,19 +11,11 @@ function checkNative(file){
  if(platform==='windows'){const pe=b.readUInt32LE(0x3c);if(b.toString('ascii',pe,pe+4)!=='PE\0\0'||b.readUInt16LE(pe+4)!==(arch==='arm64'?0xaa64:0x8664))throw Error('Wrong PE architecture: '+file)}
  if(platform==='macos'&&!run('lipo',['-archs',file]).split(/\s+/).includes('x86_64'))throw Error('Wrong Mach-O architecture')
 }
-function selectedNative(file){
- const normalized=file.split(path.sep).join('/')
- const nativePlatform=platform==='macos'?'darwin':platform==='windows'?'win32':'linux'
- const nativeArch=arch==='x86_64'?'x64':arch==='armv7l'?'arm':arch
- if(path.basename(file).startsWith('russh.'))return path.basename(file).startsWith(`russh.${nativePlatform}-${nativeArch}`)
- if(normalized.includes('/node-pty/prebuilds/'))return normalized.includes(`/node-pty/prebuilds/${nativePlatform}-${nativeArch}/`)
- return true
-}
 function checkApp(app,resources,load=false){
  const pkg=JSON.parse(asar.extractFile(path.join(resources,'app.asar'),'package.json'));if(pkg.version!==p.VERSION)throw Error('Embedded version mismatch')
  const ssh=fs.readFileSync(path.join(resources,'builtin-plugins/tabby-ssh/dist/index.js'),'utf8');if(ssh.includes('openSortEditor')||!ssh.includes('serverFileList'))throw Error('Wrong SFTP code')
  checkNative(app)
- const nodes=files(resources).filter(f=>f.endsWith('.node')&&selectedNative(f));if(!nodes.length)throw Error('Missing selected native addons');nodes.forEach(checkNative)
+ const nodes=files(resources).filter(f=>f.endsWith('.node')&&p.selectedNative(f,platform,arch));if(!nodes.length)throw Error('Missing selected native addons');nodes.forEach(checkNative)
  if(load){const expression=nodes.map(n=>'require('+JSON.stringify(n)+')').join(';')+';console.log("native-load-ok")';if(!run(req('electron'),['-e',expression],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}}).includes('native-load-ok'))throw Error('Native runtime load failed')}
  return nodes.length
 }
