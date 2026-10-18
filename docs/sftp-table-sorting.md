@@ -11,13 +11,14 @@ widths for alignment. No custom table skin, color palette, row font or borders
 are introduced. The existing columns remain Name, Size, Modified and Permissions;
 Type remains available in the initially collapsed advanced sorting editor.
 
-Click a heading to promote it while retaining other rules; click the primary
-again to reverse it. Shift-click appends or reverses a secondary rule in place.
+Plain clicks select a single column, cycle ascending/descending/off, and replace
+other rules. Existing persisted multi-field choices stay intact until explicit
+interaction. Shift-click appends, reverses, then removes only that rule in place.
 Numbered arrows show priority. Enter/Space support the same Shift modifier and
 prevent duplicate click activation. Parent stays first; directories stay first.
 Existing single-field and ordered multi-field settings remain compatible.
 
-40 SSH tests, 11 unit tests, typings, lint and build checks pass.
+47 SSH tests, 11 unit tests, 7 release tests, typings, lint and build checks pass.
 `qa/sftp-native-comparison/` contains screenshots and measurements captured from
 an actual isolated Tabby renderer running the real Angular SFTP component.
 Both captures use the same default native Tabby theme and synthetic directory
@@ -32,3 +33,12 @@ Source Sans Pro; 14px; 8px 16px; rgb(202,202,202); rgb(6,6,6).
 No real user config or credentials are inspected. This validates native renderer
 appearance and fake-data interactions, not live SSH transfers or the user's
 personal theme configuration. Earlier standalone HTML previews are superseded.
+
+
+Explicit `rules: []` means sorting is disabled; missing/null rules keep legacy
+single-field/default behavior. A separate untouched server listing is the source
+for every sort change, so clearing does not preserve an already-sorted array.
+Empty sorting returns comparator ties within groups. `directoriesFirst` defaults
+to true and can be set false in config to keep the complete raw server sequence.
+The advanced editor can Apply zero rules. Legacy field/direction values are only
+mirrors; explicit rules take precedence, including empty lists.

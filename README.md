@@ -29,6 +29,22 @@ platforms for this fork are stated in each release's notes.
 
 Download this fork from [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
 
+### v1.0.238-fix — three-state SFTP sorting
+
+Plain clicks select one column and cycle **ascending → descending → off**. With Shift multi-field
+sorting, the third activation removes only that rule and renumbers the remaining
+priorities. The existing native row styling and file actions are unchanged.
+
+Clearing the last rule persists an explicit empty rule list. Refreshing, changing
+directory or reopening the panel keeps sorting off. The server's original order
+is retained; directory priority, enabled by default, only stably groups folders
+and never adds a hidden name sort while sorting is off. Advanced sorting can also
+remove its last rule and Apply an empty selection.
+
+This release is named `v1.0.238-fix` intentionally. Users already on `1.0.239`
+should install it manually; the older `1.0.239` release remains available.
+Only the signed/notarized macOS arm64 ZIP/DMG assets are published for this version.
+
 ### 1.0.239 — native SFTP headers and Cyberduck rollback
 
 The built-in SFTP panel keeps Tabby's original theme, typography, file icons,

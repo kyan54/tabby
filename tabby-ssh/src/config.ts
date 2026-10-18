@@ -8,6 +8,7 @@ export class SSHConfigProvider extends ConfigProvider {
             winSCPPath: null,
             sftpSort: {
                 rules: null,
+                directoriesFirst: true,
                 field: 'name',
                 direction: 'asc',
             },

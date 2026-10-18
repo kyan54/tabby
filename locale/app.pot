@@ -1297,3 +1297,15 @@ msgstr ""
 #: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Permissions"
 msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Server order"
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "No sorting: keep server order. Folder priority still applies if enabled."
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort rules are applied from top to bottom. Directory priority applies if enabled."
+msgstr ""

@@ -43,8 +43,10 @@
     button.btn.btn-link.btn-sm(type='button', (click)='sortEditorOpen ? cancelSortEditor() : openSortEditor()', [attr.aria-expanded]='sortEditorOpen', [attr.aria-controls]='sortEditorId')
         i.fas.me-1([class.fa-chevron-right]='!sortEditorOpen', [class.fa-chevron-down]='sortEditorOpen', aria-hidden='true')
         span(translate) Advanced sorting
+    span.small.text-muted.ms-2(*ngIf='sort.length === 0', translate) Server order
     .sort-editor([attr.id]='sortEditorId', *ngIf='sortEditorOpen', (keydown.escape)='cancelSortEditor(); $event.stopPropagation()')
-        .small.text-muted.mb-2(translate) Sort rules are applied from top to bottom. Folders stay first.
+        .small.text-muted.mb-2(translate) Sort rules are applied from top to bottom. Directory priority applies if enabled.
+        .small.text-muted.mb-2(*ngIf='sortDraft.length === 0', translate) No sorting: keep server order. Folder priority still applies if enabled.
         .sort-rule.d-flex.align-items-center.mb-2(*ngFor='let rule of sortDraft; let index = index')
             span.me-2 {{index + 1}}.
             select.form-control.form-control-sm.me-2(
@@ -66,7 +68,7 @@
                 i.fas.fa-arrow-up(aria-hidden='true')
             button.btn.btn-link.btn-sm(type='button', (click)='moveSortRule(index, 1)', [disabled]='index === sortDraft.length - 1', [attr.aria-label]='"Move down" | translate', [title]='"Move down" | translate')
                 i.fas.fa-arrow-down(aria-hidden='true')
-            button.btn.btn-link.btn-sm(type='button', (click)='removeSortRule(index)', [disabled]='sortDraft.length === 1', [attr.aria-label]='"Remove sort rule" | translate', [title]='"Remove sort rule" | translate')
+            button.btn.btn-link.btn-sm(type='button', (click)='removeSortRule(index)', [attr.aria-label]='"Remove sort rule" | translate', [title]='"Remove sort rule" | translate')
                 i.fas.fa-times(aria-hidden='true')
         .d-flex.align-items-center.flex-wrap
             button.btn.btn-link.btn-sm.me-auto(type='button', (click)='addSortRule()', [disabled]='sortDraft.length === sortFields.length', translate) Add sort field

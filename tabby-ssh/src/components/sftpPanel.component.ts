@@ -26,6 +26,7 @@ export class SFTPPanelComponent {
     @Output() closed = new EventEmitter<void>()
     sftp: SFTPSession
     fileList: SFTPFile[]|null = null
+    private serverFileList: SFTPFile[]|null = null
     filteredFileList: SFTPFile[] = []
     @Input() path = '/'
     @Output() pathChange = new EventEmitter<string>()
@@ -84,9 +85,10 @@ export class SFTPPanelComponent {
         }
 
         this.fileList = null
+        this.serverFileList = null
         this.filteredFileList = []
         try {
-            this.fileList = await this.sftp.readdir(this.path)
+            this.serverFileList = await this.sftp.readdir(this.path)
         } catch (error) {
             this.notifications.error(error.message)
             if (previousPath && fallbackOnError) {
@@ -109,17 +111,19 @@ export class SFTPPanelComponent {
     sortColumn (field: SFTPSortField, event: { shiftKey: boolean }): void {
         const rules = this.sort.map(rule => ({ ...rule }))
         const index = rules.findIndex(rule => rule.field === field)
-        if (index >= 0) {
-            if (event.shiftKey || index === 0) {
-                rules[index].direction = rules[index].direction === 'asc' ? 'desc' : 'asc'
-            }
-            if (!event.shiftKey) {
-                rules.unshift(...rules.splice(index, 1))
-            }
-        } else if (event.shiftKey) {
+        if (!event.shiftKey) {
+            const primary = this.sort.length ? this.sort[0] : null
+            this.sort = primary?.field !== field ? [{ field, direction: 'asc' }]
+                : primary.direction === 'asc' ? [{ field, direction: 'desc' }] : []
+            this.persistSort()
+            return
+        }
+        if (index < 0) {
             rules.push({ field, direction: 'asc' })
+        } else if (rules[index].direction === 'asc') {
+            rules[index].direction = 'desc'
         } else {
-            rules.unshift({ field, direction: 'asc' })
+            rules.splice(index, 1)
         }
         this.sort = normalizeSFTPSort(rules)
         this.persistSort()
@@ -165,7 +169,7 @@ export class SFTPPanelComponent {
     }
 
     removeSortRule (index: number): void {
-        if (this.sortDraft.length > 1 && index >= 0 && index < this.sortDraft.length) {
+        if (index >= 0 && index < this.sortDraft.length) {
             this.sortDraft.splice(index, 1)
         }
     }
@@ -189,8 +193,8 @@ export class SFTPPanelComponent {
     private persistSort (): void {
         this.config.store.ssh.sftpSort.rules = this.sort.map(rule => ({ ...rule }))
         // Retain the primary rule for older versions that only understand one field.
-        this.config.store.ssh.sftpSort.field = this.sort[0].field
-        this.config.store.ssh.sftpSort.direction = this.sort[0].direction
+        this.config.store.ssh.sftpSort.field = this.sort[0]?.field ?? null
+        this.config.store.ssh.sftpSort.direction = this.sort[0]?.direction ?? 'asc'
         this.config.save()
         this.cancelSortEditor()
         this.updateSortedList()
@@ -482,8 +486,8 @@ export class SFTPPanelComponent {
     }
 
     private updateSortedList (): void {
-        if (this.fileList) {
-            this.fileList = sortSFTPFiles(this.fileList, this.sort)
+        if (this.serverFileList) {
+            this.fileList = sortSFTPFiles(this.serverFileList, this.sort, this.config.store.ssh.sftpSort.directoriesFirst !== false)
         }
         this.updateFilteredList()
     }

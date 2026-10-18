@@ -6,9 +6,8 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { publish, validateArtifacts } = require('../publish-macos-release.cjs')
 const sha = 'a'.repeat(40)
-function fixture () {
+function fixture (metadata = { version: '1.2.3', tag: 'macos-v1.2.3' }) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tabby-release-test-'))
-    const metadata = { version: '1.2.3', tag: 'macos-v1.2.3' }
     fs.writeFileSync(path.join(directory, 'BUILD_INFO.json'), JSON.stringify({ commit: sha, version: metadata.version,
         architecture: 'arm64', developer_id_signing_requested: true, notarization_requested: true }))
     fs.writeFileSync(path.join(directory, 'SIGNATURE_INFO.txt'), 'Developer ID Application: fixture\nThe validate action worked!\nsource=Notarized Developer ID\n')
@@ -28,11 +27,11 @@ function fixture () {
         },
         repos: {
             getReleaseByTag: async () => missing(),
-            createRelease: async args => { calls.push(['draft', args.draft]); return { data: { id: 7, draft: true, target_commitish: sha } } },
+            createRelease: async args => { calls.push(['draft', args.draft, args.prerelease]); return { data: { id: 7, draft: true, target_commitish: sha } } },
             listReleaseAssets: async () => ({ data: uploaded }),
             deleteReleaseAsset: async () => { throw Error('unexpected deletion') },
             uploadReleaseAsset: async args => { if (failUpload) throw Error('synthetic upload failure'); calls.push(['upload', args.name]); uploaded.push({ name: args.name, size: args.data.length }) },
-            updateRelease: async args => { calls.push(['public', args.draft]); return { data: { html_url: 'https://github.com/example/repo/releases/tag/'+metadata.tag } } },
+            updateRelease: async args => { calls.push(['public', args.draft, args.prerelease, args.make_latest]); return { data: { html_url: 'https://github.com/example/repo/releases/tag/'+metadata.tag } } },
         },
     } }
     return { directory, metadata, calls, args: { github, context: { repo: { owner: 'example', repo: 'repo' }, sha, runId: 1 }, core: { notice () {} }, directory, metadata, notes: '{{VERSION}} {{SHA}} {{RUN_URL}}' },
@@ -43,9 +42,9 @@ test('publishes only after matching provenance, checksums and all five draft ass
     const f = fixture(); try {
         await publish(f.args)
         assert.deepEqual(f.calls[0], ['tag', sha])
-        assert.deepEqual(f.calls[1], ['draft', true])
+        assert.deepEqual(f.calls[1], ['draft', true, false])
         assert.equal(f.calls.filter(x => x[0] === 'upload').length, 5)
-        assert.deepEqual(f.calls.at(-1), ['public', false])
+        assert.deepEqual(f.calls.at(-1), ['public', false, false, 'true'])
     } finally { f.cleanup() }
 })
 test('checksum, source SHA and missing notarization evidence fail before mutation', async () => {
@@ -80,4 +79,24 @@ test('asset validation rejects another platform and explicit release version is 
         const result = execFileSync(process.execPath, ['--input-type=module', '-e', 'import {version} from "./scripts/vars.mjs"; console.log(version)'], { env: { ...process.env, TABBY_RELEASE_VERSION: '1.0.239' }, encoding: 'utf8' })
         assert.equal(result.trim(), '1.0.239')
     } finally { f.cleanup() }
+})
+
+
+test('accepts the exact user-requested fix suffix and v tag as a formal Latest release', async () => {
+    const f = fixture({ version: '1.0.238-fix', tag: 'v1.0.238-fix' })
+    try {
+        await publish(f.args)
+        assert.ok(f.calls.some(x => x[0] === 'upload' && x[1] === 'tabby-1.0.238-fix-macos-arm64.zip'))
+        assert.deepEqual(f.calls.at(-1), ['public', false, false, 'true'])
+        const { execFileSync } = require('node:child_process')
+        const result = execFileSync(process.execPath, ['--input-type=module', '-e', 'import {version} from "./scripts/vars.mjs"; console.log(version)'], { env: { ...process.env, TABBY_RELEASE_VERSION: '1.0.238-fix' }, encoding: 'utf8' })
+        assert.equal(result.trim(), '1.0.238-fix')
+    } finally { f.cleanup() }
+})
+test('rejects an unrelated suffix or mismatched tag without publishing', async () => {
+    for (const metadata of [{ version: '1.0.238-kyan54', tag: 'v1.0.238-kyan54' }, { version: '1.0.238-fix', tag: 'v1.0.239' }]) {
+        const f = fixture(metadata)
+        try { await assert.rejects(publish(f.args), /Invalid release identity/); assert.deepEqual(f.calls, []) }
+        finally { f.cleanup() }
+    }
 })
