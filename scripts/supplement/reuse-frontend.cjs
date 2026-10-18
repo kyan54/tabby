@@ -12,13 +12,17 @@ function copyTree(from,to){
   if(e.isDirectory())copyTree(f,t);else{portable(f);fs.copyFileSync(f,t)}
  }
 }
-async function reuse(root,basis){
+function verifyBasis(basis){
  for(const name of ['BUILD_INFO.json',`tabby-${p.VERSION}-macos-arm64.zip`]){
   const original=p.original.find(f=>f.name===name),file=path.join(basis,name)
   if(fs.statSync(file).size!==original.size||crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==original.sha256)throw Error('Unverified frontend basis: '+name)
  }
  const info=JSON.parse(fs.readFileSync(path.join(basis,'BUILD_INFO.json')))
  if(info.commit!==p.SOURCE||info.version!==p.VERSION)throw Error('Frontend source mismatch')
+ return info
+}
+async function reuse(root,basis){
+ verifyBasis(basis)
  const resources=path.join(basis,'unpacked/Tabby.app/Contents/Resources'),archive=path.join(resources,'app.asar')
  const req=createRequire(path.join(root,'package.json')),asar=req('@electron/asar')
  if(JSON.parse(asar.extractFile(archive,'package.json')).version!==p.VERSION)throw Error('Frontend embedded version mismatch')
@@ -40,5 +44,5 @@ async function reuse(root,basis){
  const result={source:p.SOURCE,version:p.VERSION,basis:'original published Mac arm64 ZIP',basisSha256:p.original.find(f=>f.name.endsWith('arm64.zip')).sha256,scope:'Only architecture-independent app/dist and plugin/dist files reused; all ARMv7 native dependencies rebuilt separately'}
  fs.writeFileSync(path.join(root,'.supplement-frontend-basis.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));return result
 }
-if(require.main===module)reuse(process.cwd(),process.argv[2]).catch(e=>{console.error(e);process.exitCode=1})
-module.exports={portable,copyTree,reuse}
+if(require.main===module)Promise.resolve().then(()=>process.argv[2]==='--verify-only'?verifyBasis(process.argv[3]):reuse(process.cwd(),process.argv[2])).catch(e=>{console.error(e);process.exitCode=1})
+module.exports={portable,copyTree,reuse,verifyBasis}

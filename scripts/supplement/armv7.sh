@@ -10,6 +10,15 @@ if [ ! -f /tmp/tabby-armv7-foundation-ready ]; then
  touch /tmp/tabby-armv7-foundation-ready
 fi
 source /work/control/scripts/supplement/armv7-tools.sh
+corepack enable
+export PATH="$HOME/.cargo/bin:$PATH"
+ basis=/work/frontend-basis
+ mkdir -p "$basis"
+ for file in BUILD_INFO.json tabby-1.0.238-fix-macos-arm64.zip; do
+  if [ ! -f "$basis/$file" ]; then curl --fail --silent --show-error --location --retry 3 -o "$basis/$file" "https://github.com/kyan54/tabby/releases/download/v1.0.238-fix/$file"; fi
+ done
+ node /work/control/scripts/supplement/reuse-frontend.cjs --verify-only "$basis"
+ python3 /work/control/scripts/supplement/extract-frontend.py "$basis/tabby-1.0.238-fix-macos-arm64.zip" "$basis/unpacked"
 if [ ! -f .supplement-prepared.json ]; then
  test "$mode" != package
  curl --fail --location --retry 3 -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/armv7-unknown-linux-gnueabihf/rustup-init
@@ -18,18 +27,16 @@ if [ ! -f .supplement-prepared.json ]; then
  export PATH="$HOME/.cargo/bin:$PATH"
  corepack enable
  yarn --frozen-lockfile --network-timeout 1000000
- basis=/work/frontend-basis
- mkdir -p "$basis"
- for file in BUILD_INFO.json tabby-1.0.238-fix-macos-arm64.zip; do
-  curl --fail --silent --show-error --location --retry 3 -o "$basis/$file" "https://github.com/kyan54/tabby/releases/download/v1.0.238-fix/$file"
- done
- 7za x -y "$basis/tabby-1.0.238-fix-macos-arm64.zip" "-o$basis/unpacked" >/tmp/tabby-frontend-extract.log
- node /work/control/scripts/supplement/reuse-frontend.cjs "$basis"
- node scripts/prepackage-plugins.mjs
- node -e 'const fs=require("node:fs");const p=require("/work/control/scripts/supplement/policy.cjs");fs.writeFileSync(".supplement-prepared.json",JSON.stringify({source:p.SOURCE,version:p.VERSION,arch:"armv7l",frontendBasis:JSON.parse(fs.readFileSync(".supplement-frontend-basis.json"))}))'
+ node -e 'const fs=require("node:fs");const p=require("/work/control/scripts/supplement/policy.cjs");fs.writeFileSync(".supplement-prepared.json",JSON.stringify({source:p.SOURCE,version:p.VERSION,arch:"armv7l",stage:"native-dependencies"}))'
 fi
 node -e 'const p=require("/work/control/scripts/supplement/policy.cjs");const m=require(process.cwd()+"/.supplement-prepared.json");if(m.source!==p.SOURCE||m.version!==p.VERSION||m.arch!=="armv7l")throw Error("Wrong prepared source")'
 git diff --exit-code -- '*.ts' '*.mjs' package.json app/package.json
 if [ "$mode" = prepare ]; then exit 0; fi
+if ! node -e 'if(require(process.cwd()+"/.supplement-prepared.json").stage!=="package-ready")process.exit(1)'; then
+ node /work/control/scripts/supplement/reuse-frontend.cjs "$basis"
+ node scripts/prepackage-plugins.mjs
+ node -e 'const fs=require("node:fs");const file=".supplement-prepared.json";const marker=JSON.parse(fs.readFileSync(file));marker.stage="package-ready";marker.frontendBasis=JSON.parse(fs.readFileSync(".supplement-frontend-basis.json"));fs.writeFileSync(file,JSON.stringify(marker))'
+fi
+git diff --exit-code -- '*.ts' '*.mjs' package.json app/package.json
 USE_SYSTEM_FPM=true node scripts/build-linux.mjs
 node /work/control/scripts/supplement/check.cjs linux armv7l
