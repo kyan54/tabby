@@ -1,0 +1,22 @@
+{
+  "asc": "asc",
+  "desc": "desc",
+  "off": true,
+  "refresh": true,
+  "reenter": true,
+  "secondaryRemoved": true,
+  "primaryRemoved": true,
+  "lastRemoved": true,
+  "persisted": true,
+  "reopenedEmpty": true,
+  "advancedEmpty": true,
+  "parent": true,
+  "noArrows": true,
+  "finalNames": [
+    "z-folder",
+    "a-folder",
+    "z.log",
+    "a.txt",
+    "m.json"
+  ]
+}

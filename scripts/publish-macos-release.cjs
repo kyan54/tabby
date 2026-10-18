@@ -32,7 +32,7 @@ async function publish ({ github, context, core, directory, metadata, notes }) {
     const { owner, repo } = context.repo
     const sha = context.sha
     const assets = validateArtifacts(directory, sha, metadata.version)
-    if (metadata.tag !== `macos-v${metadata.version}` || !/^\d+\.\d+\.\d+$/.test(metadata.version)) throw new Error('Invalid release identity')
+    if (!([`v${metadata.version}`, `macos-v${metadata.version}`].includes(metadata.tag)) || !/^\d+\.\d+\.\d+(?:-fix)?$/.test(metadata.version)) throw new Error('Invalid release identity')
     const master = await github.rest.git.getRef({ owner, repo, ref: 'heads/master' })
     if (master.data.object.sha !== sha) throw new Error('Master moved; do not publish a stale build')
     let tag

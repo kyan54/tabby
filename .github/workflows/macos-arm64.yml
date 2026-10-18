@@ -42,7 +42,7 @@ jobs:
           const metadata = require('./release-version.json')
           const requested = process.env.GITHUB_REF === 'refs/heads/master' &&
             (process.env.RELEASE_MESSAGE || '').includes(`[release:${metadata.tag}]`)
-          if (!/^\d+\.\d+\.\d+$/.test(metadata.version) || metadata.tag !== `macos-v${metadata.version}`) throw Error('Invalid release identity')
+          if (!/^\d+\.\d+\.\d+(?:-fix)?$/.test(metadata.version) || ![`v${metadata.version}`, `macos-v${metadata.version}`].includes(metadata.tag)) throw Error('Invalid release identity')
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `requested=${requested}\n`)
           if (requested) fs.appendFileSync(process.env.GITHUB_ENV, `TABBY_RELEASE_VERSION=${metadata.version}\n`)
           JS

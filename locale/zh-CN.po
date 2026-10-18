@@ -2647,3 +2647,15 @@ msgstr "按住 Shift 单击可添加或切换次级排序规则"
 #: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Permissions"
 msgstr "权限"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Server order"
+msgstr "服务器顺序"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "No sorting: keep server order. Folder priority still applies if enabled."
+msgstr "不排序：保留服务器返回顺序；若开启目录优先，仅对目录稳定分组。"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Sort rules are applied from top to bottom. Directory priority applies if enabled."
+msgstr "排序规则从上到下依次应用；目录优先仅在开启时生效。"

@@ -14,6 +14,10 @@ export const SFTP_SORT_FIELDS: SFTPSortField[] = ['name', 'modified', 'size', 't
 export function normalizeSFTPSort (value: unknown): SFTPSortRule[] {
     const candidate = value as { rules?: unknown, field?: unknown, direction?: unknown }|null|undefined
     const storedRules = candidate?.rules
+    // Explicit [] means the user cleared sorting; null/missing keeps legacy defaults.
+    if ((Array.isArray(value) && value.length === 0) || (Array.isArray(storedRules) && storedRules.length === 0)) {
+        return []
+    }
     const rawRules: unknown[] = Array.isArray(value) ? value : Array.isArray(storedRules) ? storedRules : [candidate]
     const rules: SFTPSortRule[] = []
     for (const raw of rawRules) {
@@ -43,9 +47,9 @@ function numericValue (file: SFTPFile, field: 'modified'|'size'): number|null {
 }
 
 /** Folders stay first. Missing metadata stays last in either direction. */
-export function sortSFTPFiles (files: readonly SFTPFile[], rules: readonly SFTPSortRule[]): SFTPFile[] {
+export function sortSFTPFiles (files: readonly SFTPFile[], rules: readonly SFTPSortRule[], directoriesFirst = true): SFTPFile[] {
     return [...files].sort((a, b) => {
-        if (a.isDirectory !== b.isDirectory) {
+        if (directoriesFirst && a.isDirectory !== b.isDirectory) {
             return a.isDirectory ? -1 : 1
         }
         for (const rule of rules) {
@@ -71,6 +75,6 @@ export function sortSFTPFiles (files: readonly SFTPFile[], rules: readonly SFTPS
                 return direction * comparison
             }
         }
-        return a.name.localeCompare(b.name)
+        return rules.length ? a.name.localeCompare(b.name) : 0
     })
 }

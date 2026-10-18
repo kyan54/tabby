@@ -88,7 +88,7 @@ describe('SFTP multi-field sorting', () => {
     it('migrates legacy settings and removes invalid or duplicate fields', () => {
         assert.deepEqual(normalizeSFTPSort({ field: 'size', direction: 'desc', rules: null }), [{ field: 'size', direction: 'desc' }])
         assert.deepEqual(normalizeSFTPSort({ rules: [{ field: 'modified', direction: 'desc' }, null, { field: 'modified', direction: 'asc' }, { field: 'bogus' }, { field: 'size', direction: 'bad' }] }), [{ field: 'modified', direction: 'desc' }, { field: 'size', direction: 'asc' }])
-        assert.deepEqual(normalizeSFTPSort({ rules: [] }), [{ field: 'name', direction: 'asc' }])
+        assert.deepEqual(normalizeSFTPSort({ rules: [] }), [])
     })
 })
 
@@ -109,5 +109,24 @@ describe('SFTP extension type sorting', () => {
             const sorted = sortSFTPFiles(listing(), [{ field: 'type', direction }])
             assert.deepEqual(sorted.map(x => x.name), ['a-folder', 'z-folder', 'a.txt', 'b.txt', 'c.txt'])
         }
+    })
+})
+
+
+describe('SFTP explicitly disabled ordering', () => {
+    it('distinguishes missing defaults and legacy settings from explicit empty rules', () => {
+        for (const value of [undefined, null, {}, { rules: null }]) {
+            assert.deepEqual(normalizeSFTPSort(value), [{ field: 'name', direction: 'asc' }])
+        }
+        assert.deepEqual(normalizeSFTPSort({ field: 'size', direction: 'desc' }), [{ field: 'size', direction: 'desc' }])
+        assert.deepEqual(normalizeSFTPSort([]), [])
+        assert.deepEqual(normalizeSFTPSort({ rules: [], field: 'size', direction: 'desc' }), [])
+        assert.deepEqual(normalizeSFTPSort({ rules: [{ field: 'invalid' }] }), [{ field: 'name', direction: 'asc' }])
+    })
+    it('only stably groups folders when disabled, without a hidden name tie-breaker', () => {
+        const items = listing()
+        assert.deepEqual(sortSFTPFiles(items, []).map(x => x.name), ['z-folder', 'a-folder', 'b.txt', 'a.txt', 'c.txt'])
+        assert.deepEqual(sortSFTPFiles(items, [], false), items)
+        assert.deepEqual(items.map(x => x.name), ['b.txt', 'z-folder', 'a.txt', 'a-folder', 'c.txt'])
     })
 })
