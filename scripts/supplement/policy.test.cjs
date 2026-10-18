@@ -49,10 +49,10 @@ test('generic native prebuild selection follows platform/arch and GNU libc for S
  assert.equal(p.selectedNative('/@serialport/bindings-cpp/prebuilds/win32-arm64/node.napi.node','windows','arm64'),true)
 })
 
-test('superseded cancellation is restricted to one exact repository/run/control SHA, never release mutation',async()=>{
+test('superseded cancellation is restricted to two exact repository/run/control SHAs, never release mutation',async()=>{
  const {cancelSuperseded}=require('./cancel-superseded.cjs');const calls=[]
- const args={context:{repo:{owner:'kyan54',repo:'tabby'}},core:{info(){}},github:{rest:{actions:{getWorkflowRun:async()=>({data:{head_sha:'f3b6cc9279462e1e6186a8be7b9db51c5e7bab08',path:'.github/workflows/supplement-platforms.yml',status:'in_progress'}}),cancelWorkflowRun:async a=>calls.push(a.run_id)}}}}
- await cancelSuperseded(args);assert.deepEqual(calls,[39129110968]);calls.length=0
+ const args={context:{repo:{owner:'kyan54',repo:'tabby'}},core:{info(){}},github:{rest:{actions:{getWorkflowRun:async a=>({data:{head_sha:a.run_id===39129110968?'f3b6cc9279462e1e6186a8be7b9db51c5e7bab08':'7a244e460b27d3caddeb03b4534cc2c2c14b9116',path:'.github/workflows/supplement-platforms.yml',status:'in_progress'}}),cancelWorkflowRun:async a=>calls.push(a.run_id)}}}}
+ await cancelSuperseded(args);assert.deepEqual(calls,[39129110968,39130928545]);calls.length=0
  args.github.rest.actions.getWorkflowRun=async()=>({data:{head_sha:'unexpected',path:'.github/workflows/supplement-platforms.yml',status:'in_progress'}})
  await assert.rejects(cancelSuperseded(args));assert.deepEqual(calls,[])
 })
