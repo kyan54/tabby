@@ -64,15 +64,35 @@ test('runtime checks remove compiler overrides without mutating build environmen
  assert.equal(original.RUST_TARGET_TRIPLE,'aarch64-unknown-linux-gnu')
 })
 
-test('Windows ASAR normalization retains entry existence and nonzero-size validation',()=>{
- const {prepareAsarCheck}=require('./windows-build.cjs')
+test('Windows packaging requires compiled entry existence and nonzero size',()=>{
+ const {validateCompiledEntry}=require('./windows-build.cjs')
  const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'asar-check-fixture-'))
  try{
   fs.mkdirSync(path.join(scratch,'app/dist'),{recursive:true})
-  assert.throws(()=>prepareAsarCheck(scratch),/Missing compiled/)
+  assert.throws(()=>validateCompiledEntry(scratch),/Missing compiled/)
   fs.writeFileSync(path.join(scratch,'app/dist/main.js'),'')
-  assert.throws(()=>prepareAsarCheck(scratch),/Missing compiled/)
+  assert.throws(()=>validateCompiledEntry(scratch),/Missing compiled/)
   const source=fs.readFileSync(path.join(__dirname,'windows-build.cjs'),'utf8')
-  assert.match(source,/relativeFile.split/);assert.match(source,/statFile/)
+  assert.doesNotMatch(source,/writeFileSync/)
+ }finally{fs.rmSync(scratch,{recursive:true,force:true})}
+})
+
+test('Windows compile stops immediately on native command failure before packaging',()=>{
+ const {compile}=require('./windows-compile.cjs'),calls=[]
+ assert.throws(()=>compile(cmd=>{calls.push(cmd);throw Error('fixture install failed')}),/fixture install failed/)
+ assert.equal(calls.length,1)
+ compile(cmd=>calls.push(cmd));assert.equal(calls.length,6)
+})
+
+test('global node-gyp path resolves in isolated lifecycle child and is removed for app runtime',()=>{
+ const cp=require('node:child_process'),{runtimeEnvironment}=require('./runtime-env.cjs')
+ const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'gyp-path-fixture-'))
+ try{
+  const globalRoot=path.join(scratch,'global'),pkg=path.join(globalRoot,'node-gyp')
+  fs.mkdirSync(pkg,{recursive:true});fs.writeFileSync(path.join(pkg,'package.json'),JSON.stringify({name:'node-gyp',version:'13.0.2'}))
+  const script=path.join(scratch,'lifecycle.cjs');fs.writeFileSync(script,"console.log(require.resolve('node-gyp/package.json'))")
+  const env={...process.env,NODE_PATH:globalRoot,npm_config_node_gyp:path.join(pkg,'bin/node-gyp.js')}
+  assert.equal(cp.execFileSync(process.execPath,[script],{env,encoding:'utf8'}).trim(),fs.realpathSync(path.join(pkg,'package.json')))
+  assert.equal(runtimeEnvironment(env).NODE_PATH,undefined);assert.equal(runtimeEnvironment(env).npm_config_node_gyp,undefined)
  }finally{fs.rmSync(scratch,{recursive:true,force:true})}
 })
