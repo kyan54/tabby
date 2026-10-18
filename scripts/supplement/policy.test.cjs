@@ -56,3 +56,23 @@ test('superseded cancellation is restricted to one exact repository/run/control 
  args.github.rest.actions.getWorkflowRun=async()=>({data:{head_sha:'unexpected',path:'.github/workflows/supplement-platforms.yml',status:'in_progress'}})
  await assert.rejects(cancelSuperseded(args));assert.deepEqual(calls,[])
 })
+
+test('runtime checks remove compiler overrides without mutating build environment',()=>{
+ const {runtimeEnvironment}=require('./runtime-env.cjs')
+ const original={RUST_TARGET_TRIPLE:'aarch64-unknown-linux-gnu',ELECTRON_RUN_AS_NODE:'1',TABBY_RELEASE_VERSION:p.VERSION,PATH:'/example'}
+ assert.deepEqual(runtimeEnvironment(original),{PATH:'/example'})
+ assert.equal(original.RUST_TARGET_TRIPLE,'aarch64-unknown-linux-gnu')
+})
+
+test('Windows ASAR normalization retains entry existence and nonzero-size validation',()=>{
+ const {prepareAsarCheck}=require('./windows-build.cjs')
+ const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'asar-check-fixture-'))
+ try{
+  fs.mkdirSync(path.join(scratch,'app/dist'),{recursive:true})
+  assert.throws(()=>prepareAsarCheck(scratch),/Missing compiled/)
+  fs.writeFileSync(path.join(scratch,'app/dist/main.js'),'')
+  assert.throws(()=>prepareAsarCheck(scratch),/Missing compiled/)
+  const source=fs.readFileSync(path.join(__dirname,'windows-build.cjs'),'utf8')
+  assert.match(source,/relativeFile.split/);assert.match(source,/statFile/)
+ }finally{fs.rmSync(scratch,{recursive:true,force:true})}
+})
