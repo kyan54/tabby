@@ -6,11 +6,10 @@ name: Supplement existing v1.0.238-fix platforms
       - master
     paths:
       - .github/workflows/supplement-platforms.yml
+      - scripts/supplement/recovery.json
 permissions:
   contents: read
-concurrency:
-  group: supplement-v1.0.238-fix
-  cancel-in-progress: false
+  actions: read
 jobs:
   preflight:
     runs-on: ubuntu-24.04
@@ -27,6 +26,17 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').preflight(github, context)
+      - id: plan
+        uses: actions/github-script@v7
+        with:
+          script: for(const [k,v] of Object.entries(require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/plan.cjs').plan())) core.setOutput(k,v)
+    outputs:
+      macos: ${{ steps.plan.outputs.macos }}
+      armv7: ${{ steps.plan.outputs.armv7 }}
+      linux: ${{ steps.plan.outputs.linux }}
+      windows: ${{ steps.plan.outputs.windows }}
+      linux_matrix: ${{ steps.plan.outputs.linux_matrix }}
+      windows_matrix: ${{ steps.plan.outputs.windows_matrix }}
   macos:
     needs: preflight
     runs-on: macos-15-intel
@@ -115,22 +125,14 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
+    if: ${{ needs.preflight.outputs.macos == 'true' }}
   linux:
     needs: preflight
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: linux
-            arch: x64
-            os: ubuntu-24.04
-            rust: x86_64-unknown-linux-gnu
-          - platform: linux
-            arch: arm64
-            os: ubuntu-24.04-arm
-            rust: aarch64-unknown-linux-gnu
+      matrix: ${{ fromJSON(needs.preflight.outputs.linux_matrix) }}
     defaults:
       run:
         working-directory: source
@@ -192,6 +194,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
+    if: ${{ needs.preflight.outputs.linux == 'true' }}
   armv7:
     needs: preflight
     runs-on: ubuntu-24.04
@@ -238,22 +241,14 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
+    if: ${{ needs.preflight.outputs.armv7 == 'true' }}
   windows:
     needs: preflight
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: windows
-            arch: x64
-            os: windows-2022
-            rust: x86_64-pc-windows-msvc
-          - platform: windows
-            arch: arm64
-            os: windows-11-arm
-            rust: aarch64-pc-windows-msvc
+      matrix: ${{ fromJSON(needs.preflight.outputs.windows_matrix) }}
     defaults:
       run:
         working-directory: source
@@ -304,29 +299,33 @@ jobs:
           ls -la build/vc_redist.exe
       - name: Build UAC helper
         shell: powershell
-        run: |
-          # extras/UAC.exe used to be a checked-in prebuilt, so source fixes never shipped.
-          # The solution has no ARM64 config; the x64 binary runs under emulation on ARM64.
+        run: >-
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $install = & $vswhere -latest -requires Microsoft.Component.MSBuild -property installationPath
+
           $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
-          if (-not $msbuild) { throw "MSBuild not found" }
 
-          # The project pins VS2017 (v141) and SDK 10.0.17763; retarget to whatever the runner has.
-          & $msbuild tabby-uac\UAC.sln `
-            /p:Configuration=Release `
-            /p:Platform=x64 `
-            /p:PlatformToolset=v143 `
-            /p:WindowsTargetPlatformVersion=10.0 `
-            /verbosity:minimal
-          if ($LASTEXITCODE -ne 0) { throw "UAC build failed" }
+          $toolsets = Get-ChildItem "$install\MSBuild\Microsoft\VC\v*\Platforms\x64\PlatformToolsets" -Directory | Where-Object { $_.Name -match
+          '^v[0-9]+$' } | Sort-Object Name -Descending
 
-          # don't hardcode MSBuild's output layout
-          $built = Get-ChildItem tabby-uac -Recurse -Filter UAC.exe |
-            Where-Object { $_.FullName -match '\\Release\\' } |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $built) { throw "UAC.exe not found after build" }
+          $toolset = $toolsets[0].Name
+
+          if (-not $msbuild -or -not $toolset) { throw 'Installed MSBuild/C++ toolset not found' }
+
+          Write-Output "Using installed C++ platform toolset $toolset"
+
+          & $msbuild tabby-uac\UAC.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=$toolset /p:WindowsTargetPlatformVersion=10.0
+          /verbosity:minimal
+
+          if ($LASTEXITCODE -ne 0) { throw 'UAC build failed' }
+
+          $built = Get-ChildItem tabby-uac -Recurse -Filter UAC.exe | Where-Object { $_.FullName -match '\\Release\\' } | Sort-Object LastWriteTime
+          -Descending | Select-Object -First 1
+
+          if (-not $built) { throw 'UAC.exe not found' }
+
           Copy-Item $built.FullName extras\UAC.exe -Force
-          Get-Item extras\UAC.exe | Format-List FullName, Length, LastWriteTime
       - name: Install, test and compile fixed source
         shell: pwsh
         run: |-
@@ -386,8 +385,14 @@ jobs:
 
           $arch = if ("$env:ARCH" -eq "x64") { "x64" } else { "arm64" }
 
-          $crtDir = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\$arch\Microsoft.VC*.CRT" -Directory -ErrorAction
-          SilentlyContinue | Select-Object -First 1
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $install = & $vswhere -latest -property installationPath
+
+          $crtDir = Get-ChildItem "$install\VC\Redist\MSVC\*\$arch\Microsoft.VC*.CRT" -Directory -ErrorAction SilentlyContinue | Select-Object -First
+          1
+
+          if (-not $crtDir) { throw 'VC runtime directory not found' }
 
           if ($crtDir) {
             @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll") | ForEach-Object {
@@ -436,8 +441,10 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
+    if: ${{ needs.preflight.outputs.windows == 'true' }}
   append:
     needs:
+      - preflight
       - macos
       - linux
       - armv7
@@ -445,6 +452,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -453,14 +461,22 @@ jobs:
       - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
-      - uses: actions/download-artifact@v4
+      - name: Collect current and previously validated producer artifacts
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
-          pattern: supplement-*
-          path: additional
-          merge-multiple: true
+          script: >-
+            await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/collect.cjs').collect({github, context, core,
+            directory:process.env.GITHUB_WORKSPACE+'/additional'})
       - name: Append only verified missing assets to the existing release
         uses: actions/github-script@v7
         with:
           script: >-
             await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').publish({github, context, core,
             directory:process.env.GITHUB_WORKSPACE+'/additional'})
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    timeout-minutes: 150
+    concurrency:
+      group: supplement-append-v1.0.238-fix
+      cancel-in-progress: false
