@@ -2641,17 +2641,9 @@ msgid "Type"
 msgstr "类型"
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Folder"
-msgstr "文件夹"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "File"
-msgstr "文件"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Click a column to sort. Shift-click to add or change a secondary rule. Folders stay first."
-msgstr "单击列标题排序；按住 Shift 单击可添加或切换次级排序。文件夹始终优先。"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Shift-click to add or change a secondary sort rule"
 msgstr "按住 Shift 单击可添加或切换次级排序规则"
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Permissions"
+msgstr "权限"

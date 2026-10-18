@@ -1,0 +1,11 @@
+{
+  "renderedRows": 6,
+  "hasHeader": true,
+  "font": "\"Source Sans Pro\"",
+  "fontSize": "14px",
+  "rowPadding": "8px 16px",
+  "color": "rgb(202, 202, 202)",
+  "background": "rgb(6, 6, 6)",
+  "path": "/demo",
+  "headerButtons": 3
+}

@@ -1291,17 +1291,9 @@ msgid "Type"
 msgstr ""
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Folder"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "File"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Click a column to sort. Shift-click to add or change a secondary rule. Folders stay first."
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Shift-click to add or change a secondary sort rule"
+msgstr ""
+
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Permissions"
 msgstr ""

@@ -1,0 +1,10 @@
+{
+  "primary": "size",
+  "secondary": 3,
+  "modifiedDirection": "desc",
+  "keyboardDefaultPrevented": true,
+  "parentRemainsFirst": true,
+  "filteredNames": [
+    "README.md"
+  ]
+}

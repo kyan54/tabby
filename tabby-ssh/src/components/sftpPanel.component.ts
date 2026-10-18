@@ -7,7 +7,7 @@ import { SSHSession } from '../session/ssh'
 import { SFTPContextMenuItemProvider } from '../api'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { SFTPCreateDirectoryModalComponent } from './sftpCreateDirectoryModal.component'
-import { normalizeSFTPSort, sortSFTPFiles, sftpFileType, SFTPSortRule, SFTPSortField, SFTP_SORT_FIELDS } from '../sftpSorting'
+import { normalizeSFTPSort, sortSFTPFiles, SFTPSortRule, SFTPSortField, SFTP_SORT_FIELDS } from '../sftpSorting'
 
 let nextSortEditorId = 0
 
@@ -38,11 +38,6 @@ export class SFTPPanelComponent {
     sortDraft: SFTPSortRule[] = []
     sortEditorOpen = false
     sortEditorId = `sftp-advanced-sort-${nextSortEditorId++}`
-    sortColumns: { field: SFTPSortField, label: string }[] = [
-        { field: 'name', label: 'Name' }, { field: 'size', label: 'Size' },
-        { field: 'type', label: 'Type' }, { field: 'modified', label: 'Modified' },
-    ]
-
     sortFields = SFTP_SORT_FIELDS
 
     constructor (
@@ -137,10 +132,6 @@ export class SFTPPanelComponent {
             event.stopPropagation()
             this.sortColumn(field, event)
         }
-    }
-
-    fileType (item: SFTPFile): string {
-        return sftpFileType(item)
     }
 
     openSortEditor (): void {

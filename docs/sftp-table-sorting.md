@@ -1,34 +1,34 @@
-# SFTP table sorting
+# SFTP header sorting — original Tabby appearance
 
-The implementation starts from `148dc179da8a3d1a446ba387dc96e6f89a72ba3f`
-(PR #1 after the official upstream sync, before Cyberduck integration).
-It keeps the existing sorting/filtering/navigation code and persisted ordered rules.
+The clean baseline is `148dc179da8a3d1a446ba387dc96e6f89a72ba3f`
+(PR #1, after official upstream sync and before Cyberduck integration).
+The review branch contains an explicit rollback relative to current master.
 
-- Columns: Name, Size, Type, Modified. Clicking promotes a column to primary while
-  retaining other selected rules. Clicking the primary again reverses it.
-- Shift-click appends a new secondary rule or reverses a selected rule in place.
-  Arrows and numbers show direction and priority. Native buttons support Tab,
-  Enter, Space and modified keyboard activation; the primary column exposes aria-sort.
-- Directories stay first in both directions. The parent row is outside the sorted,
-  filtered entries and remains first except at the filesystem root.
-- Type means the case-insensitive final extension (e.g. `.gz` for `a.tar.gz`).
-  Extensionless names, lone dotfiles and trailing dots display File and sort before
-  extensions ascending. Directory type is Folder. Equal values retain the existing
-  name fallback unless a lower-priority rule resolves the tie.
-- Existing single-field and ordered multi-field settings remain readable. Column
-  interaction saves through the existing ConfigService path. Advanced sorting is
-  collapsed initially; its Apply/Cancel editor remains available, including Type.
-- A 620px minimum table width gives narrow panels horizontal scrolling. Column
-  widths are shared between header and body. Colors inherit the current theme;
-  focused buttons have visible outlines. Permissions remain available as row tooltips.
+The existing list-group rows, icons, click/context-menu actions, permissions,
+hover colors, Source Sans Pro font, padding and panel layout are retained.
+The only layout additions are a clickable header and shared metadata column
+widths for alignment. No custom table skin, color palette, row font or borders
+are introduced. The existing columns remain Name, Size, Modified and Permissions;
+Type remains available in the initially collapsed advanced sorting editor.
 
-Validation: 40 SSH tests, 11 unit tests, complete typings/module build, lint and SSH
-Webpack. The fake-data layout harness is `qa/sftp-header-sorting/generate-layout.cjs`;
-its screenshots exercise the production Pug table markup and SCSS at wide/360px
-widths in light/dark colors. This is a static layout check, not a live SSH test or
-full Angular browser interaction test. Component interaction tests execute the
-actual component with mocked host services and synthetic listings.
+Click a heading to promote it while retaining other rules; click the primary
+again to reverse it. Shift-click appends or reverses a secondary rule in place.
+Numbered arrows show priority. Enter/Space support the same Shift modifier and
+prevent duplicate click activation. Parent stays first; directories stay first.
+Existing single-field and ordered multi-field settings remain compatible.
 
-No SSH connections, credentials, user config, Keychain records, or installed apps
-are changed by this work. Local test packaging is separate from installation and
-public release; no signed/notarized distribution is implied.
+40 SSH tests, 11 unit tests, typings, lint and build checks pass.
+`qa/sftp-native-comparison/` contains screenshots and measurements captured from
+an actual isolated Tabby renderer running the real Angular SFTP component.
+Both captures use the same default native Tabby theme and synthetic directory
+entries. The original capture uses the untouched baseline plugin; the modified
+capture uses the current plugin. Component creation uses Angular's real factory
+and application injector. Only the SFTP session adapter is replaced with an
+in-memory fake; no server is contacted. The host uses the production bg-dark
+class and the original SSH panel positioning, not an independent HTML preview.
+
+The row font, size, padding, foreground and panel background match in both:
+Source Sans Pro; 14px; 8px 16px; rgb(202,202,202); rgb(6,6,6).
+No real user config or credentials are inspected. This validates native renderer
+appearance and fake-data interactions, not live SSH transfers or the user's
+personal theme configuration. Earlier standalone HTML previews are superseded.
