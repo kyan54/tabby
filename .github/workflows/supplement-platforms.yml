@@ -298,34 +298,8 @@ jobs:
           fi
           ls -la build/vc_redist.exe
       - name: Build UAC helper
-        shell: powershell
-        run: >-
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-
-          $install = & $vswhere -latest -requires Microsoft.Component.MSBuild -property installationPath
-
-          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
-
-          $toolsets = Get-ChildItem "$install\MSBuild\Microsoft\VC\v*\Platforms\x64\PlatformToolsets" -Directory | Where-Object { $_.Name -match
-          '^v[0-9]+$' } | Sort-Object Name -Descending
-
-          $toolset = $toolsets[0].Name
-
-          if (-not $msbuild -or -not $toolset) { throw 'Installed MSBuild/C++ toolset not found' }
-
-          Write-Output "Using installed C++ platform toolset $toolset"
-
-          & $msbuild tabby-uac\UAC.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=$toolset /p:WindowsTargetPlatformVersion=10.0
-          /verbosity:minimal
-
-          if ($LASTEXITCODE -ne 0) { throw 'UAC build failed' }
-
-          $built = Get-ChildItem tabby-uac -Recurse -Filter UAC.exe | Where-Object { $_.FullName -match '\\Release\\' } | Sort-Object LastWriteTime
-          -Descending | Select-Object -First 1
-
-          if (-not $built) { throw 'UAC.exe not found' }
-
-          Copy-Item $built.FullName extras\UAC.exe -Force
+        shell: pwsh
+        run: '& ../control/scripts/supplement/uac.ps1'
       - name: Install, test and compile fixed source
         shell: pwsh
         run: |-
@@ -371,7 +345,7 @@ jobs:
             Remove-Item Env:SM_KEYPAIR_ALIAS -ErrorAction SilentlyContinue
             $env:CSC_IDENTITY_AUTO_DISCOVERY='false'
           }
-          node scripts/build-windows.mjs
+          node ../control/scripts/supplement/windows-build.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Windows package build failed' }
       - name: Add VC Runtime to portable zip
         shell: powershell

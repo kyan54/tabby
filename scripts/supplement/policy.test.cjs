@@ -31,3 +31,13 @@ test('recovery schedules only selected missing producer and keeps complete final
  assert.throws(()=>plan({build:['windows-arm64'],reuse_runs:['bad']}))
  assert.equal(p.products.length,22)
 })
+
+test('unsigned Windows environment removes empty certificate selectors without changing source/version or OS policy',()=>{
+ const {signingEnvironment}=require('./windows-build.cjs')
+ const input={HAS_WINDOWS_SIGNING:'false',SM_CODE_SIGNING_CERT_SHA1_HASH:'',SM_PUBLISHER_NAME:'',SM_KEYPAIR_ALIAS:'',TABBY_RELEASE_VERSION:p.VERSION,ARCH:'arm64'}
+ const result=signingEnvironment(input)
+ assert.equal(result.SM_CODE_SIGNING_CERT_SHA1_HASH,undefined);assert.equal(result.SM_PUBLISHER_NAME,undefined);assert.equal(result.SM_KEYPAIR_ALIAS,undefined)
+ assert.equal(result.TABBY_RELEASE_VERSION,p.VERSION);assert.equal(result.ARCH,'arm64');assert.equal(input.SM_CODE_SIGNING_CERT_SHA1_HASH,'')
+ assert.equal(signingEnvironment({...input,HAS_WINDOWS_SIGNING:'true',SM_KEYPAIR_ALIAS:'synthetic-existing-alias'}).SM_KEYPAIR_ALIAS,'synthetic-existing-alias')
+ const ps=fs.readFileSync(path.join(__dirname,'uac.ps1'),'utf8');assert.match(ps,/RUNNER_TEMP/);assert.match(ps,/Copy-Item tabby-uac/);assert.doesNotMatch(ps,/Set-ExecutionPolicy|Disable|Set-MpPreference/)
+})

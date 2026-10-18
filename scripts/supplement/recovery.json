@@ -1,1 +1,1 @@
-{"build":["windows-arm64"],"reuse_runs":[39129110968]}
+{"build":["windows-x64","windows-arm64"],"reuse_runs":[39129110968]}
