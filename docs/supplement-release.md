@@ -31,3 +31,11 @@ live-SSH acceptance. The original Mac arm64 verification files remain unchanged;
 new hashes and evidence live in SHA256SUMS-additional.txt and
 BUILD_INFO-additional.json. Expected final count: 29 uploaded assets plus two
 GitHub-generated source archives (31 UI entries).
+
+Recovery planning lives in scripts/supplement/recovery.json. Only listed failed
+producers are rebuilt; the collector reuses previously validated artifacts from
+explicit run IDs. Every reused report must still match the immutable source,
+version, architecture, native-load, package and smoke requirements. Missing
+producer evidence blocks append. The append job is serialized independently, so
+a repair producer can run while the original ARMv7 job continues. VS C++ toolsets
+and VC runtime directories are discovered from the installed runner toolchain.
