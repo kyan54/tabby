@@ -38,6 +38,14 @@ if (describedVersion && version.includes('-c')) {
     version = semver.inc(version, 'prepatch').replace('-0', `-nightly.${process.env.REV ?? process.env.GITHUB_RUN_NUMBER ?? 0}`)
 }
 
+// An explicit release version is used only by the approved master release build.
+if (process.env.TABBY_RELEASE_VERSION) {
+    if (!semver.valid(process.env.TABBY_RELEASE_VERSION)) {
+        throw new Error('Invalid TABBY_RELEASE_VERSION')
+    }
+    version = process.env.TABBY_RELEASE_VERSION
+}
+
 export const builtinPlugins = [
     'tabby-core',
     'tabby-settings',

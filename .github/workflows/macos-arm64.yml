@@ -3,8 +3,8 @@ name: macOS arm64 artifacts
 on:
   workflow_dispatch:
   push:
-    branches: [feat/sftp-table-rollback-review]
-    paths: [.github/workflows/macos-arm64.yml]
+    branches: [master]
+    paths: [.github/workflows/macos-arm64.yml, release-version.json]
 
 permissions:
   contents: read
@@ -17,6 +17,8 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 60
+    outputs:
+      release_requested: ${{ steps.release.outputs.requested }}
     env:
       ARCH: arm64
       RUST_TARGET_TRIPLE: aarch64-apple-darwin
@@ -30,6 +32,20 @@ jobs:
       - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
+      - name: Resolve explicit release request
+        id: release
+        env:
+          RELEASE_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          node - <<'JS'
+          const fs = require('fs')
+          const metadata = require('./release-version.json')
+          const requested = process.env.GITHUB_REF === 'refs/heads/master' &&
+            (process.env.RELEASE_MESSAGE || '').includes(`[release:${metadata.tag}]`)
+          if (!/^\d+\.\d+\.\d+$/.test(metadata.version) || metadata.tag !== `macos-v${metadata.version}`) throw Error('Invalid release identity')
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `requested=${requested}\n`)
+          if (requested) fs.appendFileSync(process.env.GITHUB_ENV, `TABBY_RELEASE_VERSION=${metadata.version}\n`)
+          JS
       - name: Require existing signing and notarization credentials
         run: |
           test "$HAS_MAC_SIGNING" = true
@@ -46,6 +62,7 @@ jobs:
         run: |
           yarn run test:ssh-term
           yarn run test:unit
+          node --test scripts/test/macos-release.test.cjs
           yarn run build:typings
           yarn run lint
           yarn run build
@@ -125,3 +142,28 @@ jobs:
             dist/SHA256SUMS-zip.txt
             dist/BUILD_INFO.json
             dist/SIGNATURE_INFO.txt
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/master' && needs.build.outputs.release_requested == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Tabby-macOS-arm64-*-${{ github.sha }}
+          path: release-assets
+          merge-multiple: true
+      - name: Publish verified arm64 assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const path = require('path')
+            const { publish } = require(path.join(process.env.GITHUB_WORKSPACE, 'scripts/publish-macos-release.cjs'))
+            await publish({ github, context, core,
+              directory: path.join(process.env.GITHUB_WORKSPACE, 'release-assets'),
+              metadata: require(path.join(process.env.GITHUB_WORKSPACE, 'release-version.json')),
+              notes: fs.readFileSync('docs/release-macos.md', 'utf8') })

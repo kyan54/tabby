@@ -17,18 +17,31 @@
 
 ### 为什么有这个分支
 
-这是上游 [Tabby](https://github.com/Eugeny/tabby) 的一个个人分支（fork）。我维护它纯粹是为了
-自己日常使用方便：它跟随上游的版本更新，并在其基础上叠加了一些贴合我个人使用习惯的小修复和构建
-调整。它不是官方构建，也不提供任何支持保证——如果上游的 Tabby 已经能满足你的需求，请优先使用上游版本。
+这是上游 [Tabby](https://github.com/Eugeny/tabby) 的个人分支，跟随上游更新，并保留贴近日常使用的小幅改动。
+它不是上游官方构建。下方保留上游项目介绍；本分支实际验证的平台和下载内容以各次 Release 说明为准。
 
-本分支的预编译安装包发布在 [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases)。
+本分支下载：[kyan54/tabby/releases](https://github.com/kyan54/tabby/releases)。
 
-### v1.0.234-fix-v0.3
+### 1.0.239：原生 SFTP 表头排序与 Cyberduck 回退
 
-已签名并公证的 macOS 构建。CI 产出的 macOS `.dmg` / `.zip` 现在会使用 Developer ID 证书进行代码
-签名，并通过 Apple 公证（notarization）。这样在 macOS 上不再出现“应用已损坏 / 无法验证开发者”的
-提示，双击即可正常打开。本次发布未改动任何应用代码。Windows 与 Linux 的产物不受影响（Linux 无需
-签名；Windows 签名暂未配置）。
+内置 SFTP 面板保留 Tabby 原有主题、字体、文件图标、行样式和操作，仅在现有名称、大小、修改时间、
+权限布局上增加表头，不再使用独立的表格皮肤。
+
+* 单击名称、大小或修改时间，设为主排序；再次单击主排序列切换升降序。其他已选规则保留。
+* Shift+单击添加次级规则，或切换已有规则的方向；箭头和数字显示方向及优先级。
+  Enter/空格及 Shift 组合也可操作表头。
+* 上级目录固定首行，文件夹始终优先，排序选择会保存。原多字段编辑器（包含类型）收在默认折叠的
+  **高级排序** 中，保留应用/取消操作。
+* 撤回 Cyberduck 启动/菜单集成、密码共享、全局及连接级共享设置和原生钥匙串桥接。
+  此回退不会删除用户已有钥匙串记录，也不会重置 SSH 配置。
+
+本次仅发布实际验证的 **macOS Apple Silicon（arm64）** ZIP/DMG，使用 Developer ID 签名并通过
+Apple 公证，附 SHA-256 校验及源码/构建信息。不宣称本次已验证 Windows、Linux 或 Intel Mac 安装包。
+
+### 历史签名配置（v1.0.234-fix-v0.3）
+
+该历史版本为 macOS CI 构建引入 Developer ID 签名和 Apple 公证。当前下载请以具体 Release 的
+验证结果及校验文件为准，不将历史记录视为对所有 CI 产物或平台的统一保证。
 
 ### v1.0.234-fix-v0.2
 
