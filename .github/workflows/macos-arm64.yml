@@ -167,3 +167,11 @@ jobs:
               directory: path.join(process.env.GITHUB_WORKSPACE, 'release-assets'),
               metadata: require(path.join(process.env.GITHUB_WORKSPACE, 'release-version.json')),
               notes: fs.readFileSync('docs/release-macos.md', 'utf8') })
+      - name: Record exact-version replacement audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release-replacement-audit-${{ github.sha }}
+          path: release-assets/REPLACEMENT_AUDIT.json
+          if-no-files-found: ignore
+          retention-days: 90

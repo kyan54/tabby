@@ -29,6 +29,21 @@ platforms for this fork are stated in each release's notes.
 
 Download this fork from [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
 
+### v1.0.238-fix — rebuilt with header-only SFTP sorting
+
+The Advanced sorting entry and editor have been removed without changing the
+native file list. Click Name, Size or Modified to cycle ascending → descending →
+off; Shift-click keeps multiple rules with numbered priorities. Saved choices,
+refresh, navigation, reopening and directory priority retain their behavior.
+
+Old Type rules have no visible header, so they are filtered out on load. Other
+rules retain their order and direction; a Type-only choice becomes sorting off.
+Opening a panel does not rewrite config. The next header interaction saves only
+visible rules and leaves the directory-priority preference unchanged.
+This rebuild replaces the previously published assets under the same tag after
+verification and explicit confirmation. Check SHA256SUMS.txt and BUILD_INFO.json
+to distinguish it from cached copies of the earlier package.
+
 ### v1.0.238-fix — three-state SFTP sorting
 
 Plain clicks select one column and cycle **ascending → descending → off**. With Shift multi-field
@@ -38,8 +53,7 @@ priorities. The existing native row styling and file actions are unchanged.
 Clearing the last rule persists an explicit empty rule list. Refreshing, changing
 directory or reopening the panel keeps sorting off. The server's original order
 is retained; directory priority, enabled by default, only stably groups folders
-and never adds a hidden name sort while sorting is off. Advanced sorting can also
-remove its last rule and Apply an empty selection.
+and never adds a hidden name sort while sorting is off.
 
 This release is named `v1.0.238-fix` intentionally. Users already on `1.0.239`
 should install it manually; the older `1.0.239` release remains available.
@@ -56,8 +70,7 @@ and Permissions layout; no separate table theme is introduced.
 * Shift-click adds a secondary field or reverses an existing rule in place.
   Numbered arrows show direction and priority. Enter/Space support the same Shift modifier.
 * The parent folder stays first and directories stay ahead of files. Sort choices
-  persist. The existing multi-field editor, including Type, is under collapsed
-  **Advanced sorting** with Apply/Cancel.
+  persist.
 * Cyberduck launch/menu integration, password sharing, its global/profile controls
   and the native Keychain bridge have been removed. This rollback does not delete
   existing user Keychain entries or reset SSH profiles.

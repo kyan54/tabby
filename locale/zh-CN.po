@@ -2581,10 +2581,6 @@ msgid "id.port-forwarding.dynamic"
 msgstr "动态端口转发"
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort by"
-msgstr "排序方式"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Modified"
 msgstr "修改时间"
 
@@ -2601,40 +2597,8 @@ msgid "Descending"
 msgstr "降序"
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort rules are applied from top to bottom. Folders stay first."
-msgstr "从上到下依次排序，文件夹始终优先。"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort field"
-msgstr "排序字段"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort direction"
-msgstr "排序方向"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Move up"
-msgstr "上移"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Move down"
-msgstr "下移"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Remove sort rule"
-msgstr "删除排序字段"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Add sort field"
-msgstr "添加排序字段"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Apply"
 msgstr "应用"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Advanced sorting"
-msgstr "高级排序"
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Type"
@@ -2647,15 +2611,3 @@ msgstr "按住 Shift 单击可添加或切换次级排序规则"
 #: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Permissions"
 msgstr "权限"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Server order"
-msgstr "服务器顺序"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "No sorting: keep server order. Folder priority still applies if enabled."
-msgstr "不排序：保留服务器返回顺序；若开启目录优先，仅对目录稳定分组。"
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort rules are applied from top to bottom. Directory priority applies if enabled."
-msgstr "排序规则从上到下依次应用；目录优先仅在开启时生效。"

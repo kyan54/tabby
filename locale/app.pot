@@ -1231,10 +1231,6 @@ msgid "Zoom out"
 msgstr ""
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort by"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Modified"
 msgstr ""
 
@@ -1251,39 +1247,7 @@ msgid "Descending"
 msgstr ""
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort rules are applied from top to bottom. Folders stay first."
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort field"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort direction"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Move up"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Move down"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Remove sort rule"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Add sort field"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Apply"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Advanced sorting"
 msgstr ""
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
@@ -1296,16 +1260,4 @@ msgstr ""
 
 #: tabby-ssh/src/components/sftpPanel.component.pug
 msgid "Permissions"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Server order"
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "No sorting: keep server order. Folder priority still applies if enabled."
-msgstr ""
-
-#: tabby-ssh/src/components/sftpPanel.component.pug
-msgid "Sort rules are applied from top to bottom. Directory priority applies if enabled."
 msgstr ""
