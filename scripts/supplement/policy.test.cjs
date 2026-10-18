@@ -125,3 +125,15 @@ test('real node-gyp-build 4.6 launcher uses Node JS entry with node-gyp 13 strin
  assert.equal(launch(false).exe,'node-gyp.cmd')
  assert.deepEqual(JSON.parse(JSON.stringify(launch(true))),{exe:'/fixture/node.exe',args:[path.join('/fixture/node-gyp','bin/node-gyp.js'),'rebuild']})
 })
+
+test('compatibility preload works through actual NODE_OPTIONS child process',()=>{
+ const cp=require('node:child_process'),scratch=fs.mkdtempSync(path.join(os.tmpdir(),'gyp-preload-fixture-'))
+ try{
+  const pkg=path.join(scratch,'node_modules/node-gyp');fs.mkdirSync(pkg,{recursive:true})
+  fs.writeFileSync(path.join(pkg,'package.json'),JSON.stringify({name:'node-gyp',version:'13.0.2',bin:'./bin/node-gyp.js'}))
+  const script=path.join(scratch,'child.cjs');fs.writeFileSync(script,"console.log(JSON.stringify(require('node-gyp/package.json').bin))")
+  const before=JSON.parse(cp.execFileSync(process.execPath,[script],{encoding:'utf8'}));assert.equal(typeof before,'string')
+  const after=JSON.parse(cp.execFileSync(process.execPath,[script],{encoding:'utf8',env:{...process.env,NODE_OPTIONS:'--require '+JSON.stringify(path.join(__dirname,'windows-gyp-compat.cjs'))}}))
+  assert.deepEqual(after,{'node-gyp':'./bin/node-gyp.js'})
+ }finally{fs.rmSync(scratch,{recursive:true,force:true})}
+})
