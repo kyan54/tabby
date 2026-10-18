@@ -30,6 +30,10 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: for(const [k,v] of Object.entries(require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/plan.cjs').plan())) core.setOutput(k,v)
+      - name: Stop only the superseded known-invalid validation run
+        uses: actions/github-script@v7
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/cancel-superseded.cjs').cancelSuperseded({github, context, core})
     outputs:
       macos: ${{ steps.plan.outputs.macos }}
       armv7: ${{ steps.plan.outputs.armv7 }}
@@ -37,6 +41,9 @@ jobs:
       windows: ${{ steps.plan.outputs.windows }}
       linux_matrix: ${{ steps.plan.outputs.linux_matrix }}
       windows_matrix: ${{ steps.plan.outputs.windows_matrix }}
+    permissions:
+      contents: read
+      actions: write
   macos:
     needs: preflight
     runs-on: macos-15-intel

@@ -41,3 +41,18 @@ test('unsigned Windows environment removes empty certificate selectors without c
  assert.equal(signingEnvironment({...input,HAS_WINDOWS_SIGNING:'true',SM_KEYPAIR_ALIAS:'synthetic-existing-alias'}).SM_KEYPAIR_ALIAS,'synthetic-existing-alias')
  const ps=fs.readFileSync(path.join(__dirname,'uac.ps1'),'utf8');assert.match(ps,/RUNNER_TEMP/);assert.match(ps,/Copy-Item tabby-uac/);assert.doesNotMatch(ps,/Set-ExecutionPolicy|Disable|Set-MpPreference/)
 })
+
+test('generic native prebuild selection follows platform/arch and GNU libc for SerialPort',()=>{
+ assert.equal(p.selectedNative('/@serialport/bindings-cpp/prebuilds/android-arm/node.napi.armv7.node','linux','x64'),false)
+ assert.equal(p.selectedNative('/@serialport/bindings-cpp/prebuilds/linux-x64/node.napi.glibc.node','linux','x64'),true)
+ assert.equal(p.selectedNative('/@serialport/bindings-cpp/prebuilds/linux-x64/node.napi.musl.node','linux','x64'),false)
+ assert.equal(p.selectedNative('/@serialport/bindings-cpp/prebuilds/win32-arm64/node.napi.node','windows','arm64'),true)
+})
+
+test('superseded cancellation is restricted to one exact repository/run/control SHA, never release mutation',async()=>{
+ const {cancelSuperseded}=require('./cancel-superseded.cjs');const calls=[]
+ const args={context:{repo:{owner:'kyan54',repo:'tabby'}},core:{info(){}},github:{rest:{actions:{getWorkflowRun:async()=>({data:{head_sha:'f3b6cc9279462e1e6186a8be7b9db51c5e7bab08',path:'.github/workflows/supplement-platforms.yml',status:'in_progress'}}),cancelWorkflowRun:async a=>calls.push(a.run_id)}}}}
+ await cancelSuperseded(args);assert.deepEqual(calls,[39129110968]);calls.length=0
+ args.github.rest.actions.getWorkflowRun=async()=>({data:{head_sha:'unexpected',path:'.github/workflows/supplement-platforms.yml',status:'in_progress'}})
+ await assert.rejects(cancelSuperseded(args));assert.deepEqual(calls,[])
+})

@@ -9,14 +9,23 @@ function checkNative(file){
  const b=fs.readFileSync(file)
  if(platform==='linux'){if(b.toString('hex',0,4)!=='7f454c46'||b.readUInt16LE(18)!==machine[arch])throw Error('Wrong ELF architecture: '+file);const ld=run('ldd',[file]);if(ld.includes('not found'))throw Error('Missing native dependency: '+file)}
  if(platform==='windows'){const pe=b.readUInt32LE(0x3c);if(b.toString('ascii',pe,pe+4)!=='PE\0\0'||b.readUInt16LE(pe+4)!==(arch==='arm64'?0xaa64:0x8664))throw Error('Wrong PE architecture: '+file)}
- if(platform==='macos'&&!run('lipo',['-archs',file]).split(/\s+/).includes('x86_64'))throw Error('Wrong Mach-O architecture')
+ if(platform==='macos'&&!run('lipo',['-archs',file]).split(/\s+/).includes(arch==='x86_64'?'x86_64':arch))throw Error('Wrong Mach-O architecture')
 }
 function checkApp(app,resources,load=false){
  const pkg=JSON.parse(asar.extractFile(path.join(resources,'app.asar'),'package.json'));if(pkg.version!==p.VERSION)throw Error('Embedded version mismatch')
  const ssh=fs.readFileSync(path.join(resources,'builtin-plugins/tabby-ssh/dist/index.js'),'utf8');if(ssh.includes('openSortEditor')||!ssh.includes('serverFileList'))throw Error('Wrong SFTP code')
  checkNative(app)
  const nodes=files(resources).filter(f=>f.endsWith('.node')&&p.selectedNative(f,platform,arch));if(!nodes.length)throw Error('Missing selected native addons');nodes.forEach(checkNative)
- if(load){const expression=nodes.map(n=>'require('+JSON.stringify(n)+')').join(';')+';console.log("native-load-ok")';if(!run(req('electron'),['-e',expression],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}}).includes('native-load-ok'))throw Error('Native runtime load failed')}
+ if(load){
+  const extracted=fs.mkdtempSync(path.join(os.tmpdir(),'tabby-native-runtime-'))
+  try{
+   asar.extractAll(path.join(resources,'app.asar'),extracted)
+   const modules=['keytar','node-pty','russh','fontmanager-redux','native-process-working-directory','@serialport/bindings-cpp'].filter(n=>fs.existsSync(path.join(extracted,'node_modules',n,'package.json')))
+   if(!['keytar','node-pty','russh'].every(n=>modules.includes(n)))throw Error('Missing core native runtime packages')
+   const expression=modules.map(n=>'require('+JSON.stringify(path.join(extracted,'node_modules',n))+')').join(';')+';console.log("native-load-ok")'
+   if(!run(process.env.SUPPLEMENT_ELECTRON_PATH||req('electron'),['-e',expression],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}}).includes('native-load-ok'))throw Error('Native runtime load failed')
+  }finally{fs.rmSync(extracted,{recursive:true,force:true})}
+ }
  return nodes.length
 }
 if(run('git',['rev-parse','HEAD']).trim()!==p.SOURCE)throw Error('Wrong checked-out source SHA')

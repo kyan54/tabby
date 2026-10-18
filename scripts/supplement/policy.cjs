@@ -32,7 +32,8 @@ function selectedNative(file,platform,arch){
  const nativeArch=arch==='x86_64'?'x64':arch==='armv7l'?'arm':arch
  const prefix=`russh.${nativePlatform}-${nativeArch}`
  if(base.startsWith('russh.'))return base.startsWith(prefix+'.')||base.startsWith(prefix+'-')
- if(normalized.includes('/node-pty/prebuilds/'))return normalized.includes(`/node-pty/prebuilds/${nativePlatform}-${nativeArch}/`)
+ const prebuild=normalized.match(/\/prebuilds\/([^/]+)\//)
+ if(prebuild)return prebuild[1]===`${nativePlatform}-${nativeArch}`&&!base.includes('musl')
  return true
 }
 module.exports={VERSION,SOURCE,RELEASE_ID,TAG,original,matrix,namesFor,products,metadata,assertIdentity,selectedNative}
