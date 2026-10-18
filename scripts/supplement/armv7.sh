@@ -38,6 +38,7 @@ if ! node -e 'if(require(process.cwd()+"/.supplement-prepared.json").stage!=="pa
  node -e 'const fs=require("node:fs");const file=".supplement-prepared.json";const marker=JSON.parse(fs.readFileSync(file));marker.stage="package-ready";marker.frontendBasis=JSON.parse(fs.readFileSync(".supplement-frontend-basis.json"));fs.writeFileSync(file,JSON.stringify(marker))'
 fi
 git diff --exit-code -- '*.ts' '*.mjs' package.json app/package.json
+node /work/control/scripts/supplement/armv7-package.cjs --validate-only
 node /work/control/scripts/supplement/armv7-native-preflight.cjs
 USE_SYSTEM_FPM=true node /work/control/scripts/supplement/armv7-package.cjs
 node /work/control/scripts/supplement/check.cjs linux armv7l

@@ -203,5 +203,5 @@ test('ARM package compression changes preserve five formats, version and no-publ
  const o=require('./armv7-package.cjs').options()
  assert.deepEqual(o.linux,['deb','tar.gz','rpm','pacman','appimage']);assert.equal(o.armv7l,true)
  assert.equal(o.config.extraMetadata.version,p.VERSION);assert.equal(o.publish,'never');assert.equal(o.config.npmRebuild,false)
- for(const target of ['deb','rpm','pacman'])assert.equal(o.config[target].compression,'gzip')
+ assert.equal(o.config.deb.compression,'gz');assert.equal(o.config.rpm.compression,'gzip');assert.equal(o.config.pacman.compression,'gz')
 })
