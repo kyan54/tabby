@@ -11,8 +11,9 @@ widths for alignment. No custom table skin, color palette, row font or borders
 are introduced. The existing columns remain Name, Size, Modified and Permissions;
 Type remains available in the initially collapsed advanced sorting editor.
 
-Click a heading to promote it while retaining other rules; click the primary
-again to reverse it and once more to remove it. Shift-click appends, reverses, then removes only that rule in place.
+Plain clicks select a single column, cycle ascending/descending/off, and replace
+other rules. Existing persisted multi-field choices stay intact until explicit
+interaction. Shift-click appends, reverses, then removes only that rule in place.
 Numbered arrows show priority. Enter/Space support the same Shift modifier and
 prevent duplicate click activation. Parent stays first; directories stay first.
 Existing single-field and ordered multi-field settings remain compatible.

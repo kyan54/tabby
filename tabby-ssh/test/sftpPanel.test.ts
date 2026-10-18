@@ -38,7 +38,7 @@ const files = () => [
 function fixture (config: any = { store: { ssh: {} }, save () { } }) {
     // ConfigProxy exposes nested objects through getter-only structural members.
     const saved = config.store.ssh.sftpSort ?? { field: 'name', direction: 'asc' }
-    Object.defineProperty(config.store.ssh, 'sftpSort', { get: () => saved, configurable: true })
+    Object.defineProperty(config.store.ssh, 'sftpSort', { get: () => saved, configurable: true, enumerable: true })
     const panel = new exports.SFTPPanelComponent({}, { error: assert.fail }, {}, config, [])
     let reads = 0
     panel.sftp = { readdir: async () => { reads++; return files() } }
@@ -169,28 +169,33 @@ describe('SFTP panel sorting integration', () => {
 
 
 describe('SFTP table header interaction', () => {
-    it('promotes a column without losing old secondary rules, toggles direction, and persists', async () => {
+    it('loads legacy multi-field choices unchanged, then uses plain clicks for one column', async () => {
         let saves = 0
         const { panel, config, reads } = fixture({ store: { ssh: { sftpSort: { rules: [
             { field: 'modified', direction: 'desc' }, { field: 'size', direction: 'desc' },
         ] } } }, save: () => { saves++ } })
         await panel.navigate('/test')
+        assert.equal(panel.sortPriority('modified'), 1)
+        assert.equal(panel.sortPriority('size'), 2)
+        assert.equal(panel.sortDirection('size'), 'desc')
+        assert.equal(saves, 0)
         panel.openSortEditor()
         panel.sortColumn('size', { shiftKey: false })
         assert.equal(panel.sortEditorOpen, false)
+        assert.equal(panel.sort.length, 1)
         assert.equal(panel.sortPriority('size'), 1)
-        assert.equal(panel.sortPriority('modified'), 2)
-        assert.equal(panel.sortDirection('size'), 'desc')
+        assert.equal(panel.sortPriority('modified'), 0)
+        assert.equal(panel.sortDirection('size'), 'asc')
         panel.sortColumn('size', { shiftKey: false })
-        assert.equal(panel.sortDirection('size'), '')
-        assert.deepEqual(names(panel), ['folder', 'alpha.log', 'alpha.txt', 'beta.log'])
+        assert.equal(panel.sortDirection('size'), 'desc')
+        assert.deepEqual(names(panel), ['folder', 'beta.log', 'alpha.txt', 'alpha.log'])
         assert.equal(reads(), 1)
         assert.equal(saves, 2)
-        assert.equal(config.store.ssh.sftpSort.field, 'modified')
+        assert.equal(config.store.ssh.sftpSort.field, 'size')
         assert.equal(config.store.ssh.sftpSort.direction, 'desc')
         const reopened = fixture(config).panel
-        assert.equal(reopened.sortPriority('modified'), 1)
-        assert.equal(reopened.sortDirection('modified'), 'desc')
+        assert.equal(reopened.sort.length, 1)
+        assert.equal(reopened.sortDirection('size'), 'desc')
     })
     it('adds and toggles secondary columns with Shift and keeps all priorities unique', () => {
         const { panel, config } = fixture()
@@ -202,9 +207,9 @@ describe('SFTP table header interaction', () => {
         assert.equal(panel.sortDirection('type'), 'desc')
         panel.sortColumn('modified', { shiftKey: false })
         assert.equal(panel.sortPriority('modified'), 1)
-        assert.equal(panel.sortPriority('name'), 2)
-        assert.equal(panel.sortPriority('type'), 3)
-        assert.equal(fixture(config).panel.sortDirection('type'), 'desc')
+        assert.equal(panel.sortPriority('name'), 0)
+        assert.equal(panel.sortPriority('type'), 0)
+        assert.equal(fixture(config).panel.sortDirection('modified'), 'asc')
     })
     it('supports Enter, Space and Shift keyboard activation without a duplicate native click', () => {
         const { panel } = fixture()
@@ -214,13 +219,13 @@ describe('SFTP table header interaction', () => {
         panel.sortColumnKeydown('size', key('Enter', false))
         assert.equal(panel.sortPriority('size'), 1)
         panel.sortColumnKeydown('type', key(' ', true))
-        assert.equal(panel.sortPriority('type'), 3)
+        assert.equal(panel.sortPriority('type'), 2)
         panel.sortColumnKeydown('type', key('Enter', true))
         assert.equal(panel.sortDirection('type'), 'desc')
         panel.sortColumnKeydown('type', key('Tab', false))
         assert.equal(prevented, 3)
         assert.equal(stopped, 3)
-        assert.equal(panel.sortPriority('type'), 3)
+        assert.equal(panel.sortPriority('type'), 2)
     })
     it('retains a parent row outside filtered/sorted entries and uses native keyboard buttons', () => {
         const template = readFileSync(new URL('../src/components/sftpPanel.component.pug', import.meta.url), 'utf8')
@@ -240,10 +245,10 @@ describe('SFTP table header interaction', () => {
 
 describe('SFTP three-state sorting', () => {
     it('cycles an unselected column asc, desc, off and restores the untouched server sequence', async () => {
-        const { panel, config, reads } = fixture({ store: { ssh: { sftpSort: { rules: [] } } }, save () {} })
+        const { panel, config, reads } = fixture()
         await panel.navigate('/demo')
         const original = ['folder', 'alpha.log', 'beta.log', 'alpha.txt']
-        assert.deepEqual(names(panel), original)
+        assert.deepEqual(names(panel), ['folder', 'alpha.log', 'alpha.txt', 'beta.log'])
         panel.sortColumn('size', { shiftKey: false })
         assert.equal(panel.sortDirection('size'), 'asc')
         assert.deepEqual(names(panel), ['folder', 'alpha.log', 'alpha.txt', 'beta.log'])

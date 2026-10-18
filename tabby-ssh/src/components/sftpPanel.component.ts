@@ -111,20 +111,19 @@ export class SFTPPanelComponent {
     sortColumn (field: SFTPSortField, event: { shiftKey: boolean }): void {
         const rules = this.sort.map(rule => ({ ...rule }))
         const index = rules.findIndex(rule => rule.field === field)
-        if (index >= 0) {
-            if (event.shiftKey || index === 0) {
-                if (rules[index].direction === 'desc') {
-                    rules.splice(index, 1)
-                } else {
-                    rules[index].direction = 'desc'
-                }
-            } else {
-                rules.unshift(...rules.splice(index, 1))
-            }
-        } else if (event.shiftKey) {
+        if (!event.shiftKey) {
+            const primary = this.sort.length ? this.sort[0] : null
+            this.sort = primary?.field !== field ? [{ field, direction: 'asc' }]
+                : primary.direction === 'asc' ? [{ field, direction: 'desc' }] : []
+            this.persistSort()
+            return
+        }
+        if (index < 0) {
             rules.push({ field, direction: 'asc' })
+        } else if (rules[index].direction === 'asc') {
+            rules[index].direction = 'desc'
         } else {
-            rules.unshift({ field, direction: 'asc' })
+            rules.splice(index, 1)
         }
         this.sort = normalizeSFTPSort(rules)
         this.persistSort()

@@ -2,7 +2,7 @@ const fs=require('fs'),path=require('path'),cp=require('child_process');
 const repository=path.resolve(__dirname,'../..');const root=path.dirname(repository);const WebSocket=require(repository+'/node_modules/ws');
 const qa=root+'/releases/sftp-sort-clear';const label=process.argv[2];
 const config=qa+'/'+label+'-config',user=qa+'/'+label+'-user';fs.mkdirSync(config,{recursive:true});fs.mkdirSync(user,{recursive:true});
-fs.writeFileSync(config+'/config.yaml','version: 1\nprofiles: []\nappearance:\n  vibrancy: false\nssh:\n  sftpSort:\n    rules: []\n    field: null\n');
+fs.writeFileSync(config+'/config.yaml','version: 1\nprofiles: []\nappearance:\n  vibrancy: false\nssh:\n  sftpSort:\n    rules: null\n    field: name\n');
 try{fs.unlinkSync(user+'/DevToolsActivePort')}catch{}
 const log=fs.openSync(qa+'/'+label+'-startup.log','w');const proc=cp.spawn(qa+'/Tabby SFTP Sorting QA.app/Contents/MacOS/Tabby SFTP Test',['--remote-debugging-port=0','--user-data-dir='+user],{env:{...process.env,TABBY_CONFIG_DIRECTORY:config},stdio:['ignore',log,log]});
 const delay=n=>new Promise(r=>setTimeout(r,n));let ws;let seq=0;const pending=new Map();
@@ -32,7 +32,7 @@ async function send(method,params={}){const id=++seq;return new Promise((resolve
  const {component,panel,injector,core,tabby,app}=window.__sftpQA;const el=component.location.nativeElement;const config=injector.get(tabby.ConfigService);const buttons=el.querySelectorAll('.file-list-header button');
  const names=()=>panel.filteredFileList.map(f=>f.name);const raw=['z-folder','a-folder','z.log','a.txt','m.json'];
  const click=async(index,shift=false)=>{buttons[index].dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:shift}));component.changeDetectorRef.detectChanges();await config.save()};
- if(panel.sort.length!==0)throw Error('Expected explicit empty initial state');
+ if(panel.sort.length!==1||panel.sort[0].field!=='name')throw Error('Expected legacy default name state');
  await click(1);const asc=panel.sortDirection('size');await click(1);const desc=panel.sortDirection('size');await click(1);const off=panel.sort.length===0&&JSON.stringify(names())===JSON.stringify(raw);
  await panel.navigate('/demo');component.changeDetectorRef.detectChanges();const refresh=panel.sort.length===0&&JSON.stringify(names())===JSON.stringify(raw);
  await panel.navigate('/other');component.changeDetectorRef.detectChanges();const reenter=panel.sort.length===0&&JSON.stringify(names())===JSON.stringify(raw);

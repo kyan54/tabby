@@ -31,7 +31,7 @@ Download this fork from [kyan54/tabby/releases](https://github.com/kyan54/tabby/
 
 ### v1.0.238-fix — three-state SFTP sorting
 
-SFTP headings now cycle **ascending → descending → off**. With Shift multi-field
+Plain clicks select one column and cycle **ascending → descending → off**. With Shift multi-field
 sorting, the third activation removes only that rule and renumbers the remaining
 priorities. The existing native row styling and file actions are unchanged.
 
