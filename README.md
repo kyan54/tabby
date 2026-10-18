@@ -22,20 +22,40 @@
 
 ### Why this fork
 
-This is a personal fork of upstream [Tabby](https://github.com/Eugeny/tabby). I maintain it
-purely for my own day-to-day use: it follows the upstream releases and layers a few small fixes
-and build tweaks on top that suit my workflow. It is not an official build and comes with no
-support guarantees — if upstream Tabby works for you, please use that instead.
+This personal fork follows upstream [Tabby](https://github.com/Eugeny/tabby) and
+keeps focused changes for my daily workflow. It is not an official upstream build.
+The upstream project information below is preserved; validation and downloadable
+platforms for this fork are stated in each release's notes.
 
-Pre-built installers for this fork are published at [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
+Download this fork from [kyan54/tabby/releases](https://github.com/kyan54/tabby/releases).
 
-### v1.0.234-fix-v0.3
+### 1.0.239 — native SFTP headers and Cyberduck rollback
 
-Signed & notarized macOS builds. The macOS `.dmg` / `.zip` artifacts produced by CI are now
-code-signed with a Developer ID certificate and notarized by Apple. This removes the
-"app is damaged / cannot verify developer" warning on macOS, so the app opens with a normal
-double-click. No application code was changed in this release. Windows and Linux artifacts are
-unaffected (Linux needs no signing; Windows signing is not configured yet).
+The built-in SFTP panel keeps Tabby's original theme, typography, file icons,
+row styling and actions. It adds a header to the existing Name, Size, Modified
+and Permissions layout; no separate table theme is introduced.
+
+* Click Name, Size or Modified to make that field primary; click the primary
+  heading again to toggle ascending/descending order. Other selected rules stay.
+* Shift-click adds a secondary field or reverses an existing rule in place.
+  Numbered arrows show direction and priority. Enter/Space support the same Shift modifier.
+* The parent folder stays first and directories stay ahead of files. Sort choices
+  persist. The existing multi-field editor, including Type, is under collapsed
+  **Advanced sorting** with Apply/Cancel.
+* Cyberduck launch/menu integration, password sharing, its global/profile controls
+  and the native Keychain bridge have been removed. This rollback does not delete
+  existing user Keychain entries or reset SSH profiles.
+
+This release publishes only verified **macOS Apple Silicon (arm64)** ZIP/DMG
+packages, signed with Developer ID and notarized by Apple. SHA-256 checksums and
+source/build provenance accompany the downloads. Windows, Linux and Intel Mac
+packages are not claimed as validated for this release.
+
+### Historical signing setup (v1.0.234-fix-v0.3)
+
+Developer ID signing and Apple notarization were introduced for the macOS CI
+builds. Use the current release's notes and checksums for its verified assets;
+this historical entry is not a blanket guarantee for every CI artifact/platform.
 
 ### v1.0.234-fix-v0.2
 

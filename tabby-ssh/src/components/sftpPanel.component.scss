@@ -67,6 +67,24 @@
     .date {
         width: 200px;
     }
+
+    // Header and existing rows share the original metadata widths and spacing.
+    .file-list-header .btn-link {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .mode {
+        flex: 0 0 80px;
+    }
+
+    .size {
+        flex: 0 0 100px;
+    }
+
+    .date {
+        flex: 0 0 200px;
+    }
 }
 
 .btn-link svg {

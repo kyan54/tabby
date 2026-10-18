@@ -2,16 +2,6 @@ import { MenuItemOptions } from './menu'
 import { Subject, Observable } from 'rxjs'
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/** Sanitized statuses only; never surface native exceptions or credential data. */
-export type CyberduckPasswordStatus = 'stored'|'revoked'|'not-found'|'conflict'|'denied'|'unavailable'|'invalid'|'failed'
-
-export interface CyberduckPasswordTarget {
-    host: string
-    port: number
-    username: string
-    ownerId: string
-}
-
 export interface ClipboardContent {
     text: string
     html?: string
@@ -240,23 +230,6 @@ export abstract class PlatformService {
 
     getWinSCPPath (): string|null {
         throw new Error('Not implemented')
-    }
-
-    async getCyberduckPath (): Promise<string|null> {
-        return null
-    }
-
-    async validateCyberduckApplication (appPath: string): Promise<boolean> {
-        return false
-    }
-
-    async shareCyberduckPassword (target: CyberduckPasswordTarget, password: Buffer, appPath: string): Promise<CyberduckPasswordStatus> {
-        password.fill(0)
-        return 'unavailable'
-    }
-
-    async revokeCyberduckPassword (target: CyberduckPasswordTarget): Promise<CyberduckPasswordStatus> {
-        return 'unavailable'
     }
 
     async exec (app: string, argv: string[]): Promise<void> {

@@ -2632,34 +2632,18 @@ msgstr "添加排序字段"
 msgid "Apply"
 msgstr "应用"
 
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Open in Cyberduck"
-msgstr "用 Cyberduck 打开"
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Advanced sorting"
+msgstr "高级排序"
 
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Cyberduck cannot reuse this Tabby jump host or proxy connection."
-msgstr "Cyberduck 无法复用此 Tabby 跳板机或代理连接。"
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Type"
+msgstr "类型"
 
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Configure the route in Cyberduck separately. No direct connection has been opened."
-msgstr "请在 Cyberduck 中单独配置连接路由。本次没有发起直连。"
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Shift-click to add or change a secondary sort rule"
+msgstr "按住 Shift 单击可添加或切换次级排序规则"
 
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Cyberduck was not found. Install it in Applications or open it once so macOS can find it."
-msgstr "未找到 Cyberduck。请确认已安装到应用程序目录，或先打开一次让 macOS 识别。"
-
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "The remote shell has not reported its current directory."
-msgstr "远端 Shell 尚未上报当前目录。"
-
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Open only the server? Cyberduck will choose the directory. Authentication is managed by Cyberduck."
-msgstr "是否仅打开服务器？目录将由 Cyberduck 决定，认证由 Cyberduck 自行管理。"
-
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Open server only"
-msgstr "仅打开服务器"
-
-#: tabby-ssh/src/services/cyberduck.service.ts
-msgid "Could not open Cyberduck. Check the application and SSH connection details."
-msgstr "无法打开 Cyberduck，请检查应用及 SSH 连接信息。"
+#: tabby-ssh/src/components/sftpPanel.component.pug
+msgid "Permissions"
+msgstr "权限"
