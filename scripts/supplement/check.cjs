@@ -1,5 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process'),crypto=require('node:crypto'),{createRequire}=require('node:module')
 const p=require('./policy.cjs')
+const {runtimeEnvironment}=require('./runtime-env.cjs')
 const root=process.cwd(),[platform,arch]=process.argv.slice(2),out=path.join(root,'supplement-output');fs.mkdirSync(out,{recursive:true})
 const req=createRequire(path.join(root,'package.json')),asar=req('@electron/asar')
 const run=(cmd,args,options={})=>cp.execFileSync(cmd,args,{encoding:'utf8',timeout:90000,maxBuffer:32*1024*1024,...options})
@@ -23,7 +24,7 @@ function checkApp(app,resources,load=false){
    const modules=['keytar','node-pty','russh','fontmanager-redux','native-process-working-directory','@serialport/bindings-cpp'].filter(n=>fs.existsSync(path.join(extracted,'node_modules',n,'package.json')))
    if(!['keytar','node-pty','russh'].every(n=>modules.includes(n)))throw Error('Missing core native runtime packages')
    const expression=modules.map(n=>'require('+JSON.stringify(path.join(extracted,'node_modules',n))+')').join(';')+';console.log("native-load-ok")'
-   if(!run(process.env.SUPPLEMENT_ELECTRON_PATH||req('electron'),['-e',expression],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}}).includes('native-load-ok'))throw Error('Native runtime load failed')
+   if(!run(process.env.SUPPLEMENT_ELECTRON_PATH||req('electron'),['-e',expression],{env:{...runtimeEnvironment(process.env),ELECTRON_RUN_AS_NODE:'1'}}).includes('native-load-ok'))throw Error('Native runtime load failed')
   }finally{fs.rmSync(extracted,{recursive:true,force:true})}
  }
  return nodes.length
@@ -35,7 +36,7 @@ const app=platform==='macos'?path.join(appdir,'Contents/MacOS/Tabby'):path.join(
 const resources=path.join(appdir,platform==='macos'?'Contents/Resources':'resources')
 const nativeCount=checkApp(app,resources,true)
 const config=fs.mkdtempSync(path.join(os.tmpdir(),'tabby-supplement-config-'))
-const smoke=platform==='linux'?run('xvfb-run',['-a',app,'--no-sandbox','--version'],{env:{...process.env,TABBY_CONFIG_DIRECTORY:config}}):run(app,['--version'],{env:{...process.env,TABBY_CONFIG_DIRECTORY:config}})
+const smoke=platform==='linux'?run('xvfb-run',['-a',app,'--no-sandbox','--version'],{env:{...runtimeEnvironment(process.env),TABBY_CONFIG_DIRECTORY:config}}):run(app,['--version'],{env:{...runtimeEnvironment(process.env),TABBY_CONFIG_DIRECTORY:config}})
 if(!smoke.includes(p.VERSION))throw Error('CLI smoke version mismatch: '+smoke)
 for(const name of p.namesFor(platform,arch)){
  const file=name==='tabby-web.tar.gz'?path.join(root,name):path.join(dist,name)
@@ -48,7 +49,7 @@ for(const name of p.namesFor(platform,arch)){
   let meta=''
   if(name.endsWith('.deb')){meta=run('dpkg-deb',['-f',file,'Version','Architecture']);if(!meta.includes({x64:'amd64',arm64:'arm64',armv7l:'armhf'}[arch]))throw Error('DEB arch mismatch')}
   if(name.endsWith('.rpm')){meta=run('rpm',['-qp','--qf','%{VERSION}-%{RELEASE} %{ARCH}',file]);if(!(arch==='armv7l'?/armv7(?:l|hl)/.test(meta):meta.includes({x64:'x86_64',arm64:'aarch64'}[arch])))throw Error('RPM arch mismatch')}
-  if(name.endsWith('.pacman'))meta=run('tar',['-xOf',file,'.PKGINFO'])
+  if(name.endsWith('.pacman')){const entry=run('tar',['-tf',file]).split('\n').find(n=>n==='.PKGINFO'||n==='./.PKGINFO');if(!entry)throw Error('Missing Pacman metadata');meta=run('tar',['-xOf',file,entry])}
   if(meta&&(!meta.includes('1.0.238')||!meta.includes('fix')))throw Error('Package version mismatch: '+name)
   const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'tabby-package-check-'))
   try{
