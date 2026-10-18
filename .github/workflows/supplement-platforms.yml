@@ -113,7 +113,7 @@ jobs:
           APP=dist/mac/Tabby.app
           test "$(lipo -archs "$APP/Contents/MacOS/Tabby")" = x86_64
           codesign --verify --deep --strict "$APP"
-          xcrun stapler validate "$APP"
+          node ../control/scripts/supplement/stapler.cjs "$APP"
           spctl --assess --type execute --verbose=2 "$APP"
           hdiutil verify dist/*.dmg
           unzip -tq dist/*.zip
@@ -121,7 +121,7 @@ jobs:
           hdiutil attach -readonly -nobrowse -mountpoint /tmp/tabby-intel-dmg dist/*.dmg
           trap 'hdiutil detach /tmp/tabby-intel-dmg' EXIT
           codesign --verify --deep --strict /tmp/tabby-intel-dmg/Tabby.app
-          xcrun stapler validate /tmp/tabby-intel-dmg/Tabby.app
+          node ../control/scripts/supplement/stapler.cjs /tmp/tabby-intel-dmg/Tabby.app
           spctl --assess --type execute --verbose=2 /tmp/tabby-intel-dmg/Tabby.app
           node ../control/scripts/supplement/check.cjs macos x86_64
       - name: Upload verified products only
