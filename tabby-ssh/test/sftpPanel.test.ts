@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
-import { normalizeSFTPSort, sortSFTPFiles, SFTP_SORT_FIELDS } from '../src/sftpSorting.ts'
+import { normalizeSFTPSort, sortSFTPFiles, sftpFileType, SFTP_SORT_FIELDS } from '../src/sftpSorting.ts'
 
 // Exercise the actual component without an Electron renderer or a real SSH connection.
 // Angular decorators and UI services are host adapters; sorting/filter/navigation code is real.
@@ -23,7 +23,7 @@ runInNewContext(compiled, {
     require: (name: string) => {
         if (name === 'constants' || name === 'path') return require(name)
         if (name === '@angular/core') return { Component: decorator, Input: decorator, Output: decorator, Inject: decorator, Optional: decorator, EventEmitter }
-        if (name === '../sftpSorting') return { normalizeSFTPSort, sortSFTPFiles, SFTP_SORT_FIELDS }
+        if (name === '../sftpSorting') return { normalizeSFTPSort, sortSFTPFiles, sftpFileType, SFTP_SORT_FIELDS }
         return {}
     },
 })
@@ -120,7 +120,9 @@ describe('SFTP panel sorting integration', () => {
         panel.addSortRule()
         panel.addSortRule()
         panel.addSortRule()
-        assert.equal(panel.sortDraft.length, 3)
+        assert.equal(panel.sortDraft.length, 4)
+        assert.equal(panel.sortDraft[3].field, 'type')
+        panel.removeSortRule(3)
         panel.setSortField(1, 'name') // duplicate changes are rejected, including rapid events
         assert.equal(panel.sortDraft[1].field, 'modified')
         assert.equal(panel.isSortFieldUsed('name', 1), true)
@@ -162,5 +164,73 @@ describe('SFTP panel sorting integration', () => {
         assert.equal(panel.sortDraft[0].direction, 'asc')
         assert.equal(config.store.ssh.sftpSort.direction, 'desc')
         assert.equal(panel.sort[0].direction, 'desc')
+    })
+})
+
+
+describe('SFTP table header interaction', () => {
+    it('promotes a column without losing old secondary rules, toggles direction, and persists', async () => {
+        let saves = 0
+        const { panel, config, reads } = fixture({ store: { ssh: { sftpSort: { rules: [
+            { field: 'modified', direction: 'desc' }, { field: 'size', direction: 'desc' },
+        ] } } }, save: () => { saves++ } })
+        await panel.navigate('/test')
+        panel.openSortEditor()
+        panel.sortColumn('size', { shiftKey: false })
+        assert.equal(panel.sortEditorOpen, false)
+        assert.equal(panel.sortPriority('size'), 1)
+        assert.equal(panel.sortPriority('modified'), 2)
+        assert.equal(panel.sortDirection('size'), 'desc')
+        panel.sortColumn('size', { shiftKey: false })
+        assert.equal(panel.sortDirection('size'), 'asc')
+        assert.deepEqual(names(panel), ['folder', 'alpha.log', 'alpha.txt', 'beta.log'])
+        assert.equal(reads(), 1)
+        assert.equal(saves, 2)
+        assert.equal(config.store.ssh.sftpSort.field, 'size')
+        assert.equal(config.store.ssh.sftpSort.direction, 'asc')
+        const reopened = fixture(config).panel
+        assert.equal(reopened.sortPriority('modified'), 2)
+        assert.equal(reopened.sortDirection('modified'), 'desc')
+    })
+    it('adds and toggles secondary columns with Shift and keeps all priorities unique', () => {
+        const { panel, config } = fixture()
+        panel.sortColumn('type', { shiftKey: true })
+        assert.equal(panel.sortPriority('name'), 1)
+        assert.equal(panel.sortPriority('type'), 2)
+        panel.sortColumn('type', { shiftKey: true })
+        assert.equal(panel.sortPriority('type'), 2)
+        assert.equal(panel.sortDirection('type'), 'desc')
+        panel.sortColumn('modified', { shiftKey: false })
+        assert.equal(panel.sortPriority('modified'), 1)
+        assert.equal(panel.sortPriority('name'), 2)
+        assert.equal(panel.sortPriority('type'), 3)
+        assert.equal(fixture(config).panel.sortDirection('type'), 'desc')
+    })
+    it('supports Enter, Space and Shift keyboard activation without a duplicate native click', () => {
+        const { panel } = fixture()
+        let prevented = 0, stopped = 0
+        const key = (value: string, shiftKey: boolean) => ({ key: value, shiftKey,
+            preventDefault: () => { prevented++ }, stopPropagation: () => { stopped++ } })
+        panel.sortColumnKeydown('size', key('Enter', false))
+        assert.equal(panel.sortPriority('size'), 1)
+        panel.sortColumnKeydown('type', key(' ', true))
+        assert.equal(panel.sortPriority('type'), 3)
+        panel.sortColumnKeydown('type', key('Enter', true))
+        assert.equal(panel.sortDirection('type'), 'desc')
+        panel.sortColumnKeydown('type', key('Tab', false))
+        assert.equal(prevented, 3)
+        assert.equal(stopped, 3)
+        assert.equal(panel.sortPriority('type'), 3)
+    })
+    it('retains a parent row outside filtered/sorted entries and uses native keyboard buttons', () => {
+        const template = readFileSync(new URL('../src/components/sftpPanel.component.pug', import.meta.url), 'utf8')
+        assert.match(template, /tr.parent-row\(\*ngIf='path !== \"\/\"'/)
+        assert.ok(template.indexOf('tr.parent-row') < template.indexOf('tr.file-row'))
+        assert.match(template, /button.sort-heading\(type='button', \(click\)='sortColumn\(column.field, \$event\)'/)
+        assert.match(template, /aria-sort/)
+        assert.match(template, /\$event.stopPropagation\(\); open\(item\)/)
+        assert.match(template, /aria-expanded/)
+        const { panel } = fixture()
+        assert.equal(panel.sortEditorOpen, false)
     })
 })

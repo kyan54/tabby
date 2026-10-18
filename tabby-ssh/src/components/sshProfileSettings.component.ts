@@ -7,7 +7,6 @@ import { firstBy } from 'thenby'
 import { FileProvidersService, Platform, PlatformService, HostAppService, PromptModalComponent, PartialProfile, ProfilesService, ProfileSettingsComponent, FullyDefined, ProxifiedConfig, TranslateService } from 'tabby-core'
 import { LoginScriptsSettingsComponent } from 'tabby-terminal'
 import { PasswordStorageService } from '../services/passwordStorage.service'
-import { CyberduckService } from '../services/cyberduck.service'
 import { ForwardedPortConfig, SSHAlgorithmType, SSHProfile } from '../api'
 import { supportedAlgorithms } from '../algorithms'
 import { SSHProfilesService } from '../profiles'
@@ -20,7 +19,6 @@ export class SSHProfileSettingsComponent implements ProfileSettingsComponent<SSH
     Platform = Platform
     profile: ProxifiedConfig<FullyDefined<SSHProfile>>
     hasSavedPassword: boolean
-    revokingCyberduckPassword = false
 
     connectionMode: 'direct'|'proxyCommand'|'jumpHost'|'socksProxy'|'httpProxy' = 'direct'
 
@@ -37,14 +35,9 @@ export class SSHProfileSettingsComponent implements ProfileSettingsComponent<SSH
         private fileProviders: FileProvidersService,
         private platform: PlatformService,
         private translate: TranslateService,
-        private cyberduck: CyberduckService,
     ) { }
 
     async ngOnInit () {
-        // New/duplicated profiles and group/global defaults must not inherit consent.
-        if (!this.canShareCyberduckPassword) {
-            this.profile.options.cyberduckPasswordSharing = false
-        }
         this.jumpHosts = (await this.profilesService.getProfiles({ includeBuiltin: false })).filter(x => x.type === 'ssh' && x !== this.profile)
         this.jumpHosts.sort(firstBy(x => this.getJumpHostLabel(x)))
 
@@ -118,30 +111,6 @@ export class SSHProfileSettingsComponent implements ProfileSettingsComponent<SSH
     clearSavedPassword () {
         this.hasSavedPassword = false
         this.passwordStorage.deletePassword(this.profile)
-    }
-
-    get canShareCyberduckPassword (): boolean {
-        return !!this.profile.id?.startsWith('ssh:custom:') && !this.profile.isTemplate && !this.profile.isBuiltin
-    }
-
-    setCyberduckPasswordSharing (enabled: boolean) {
-        if (this.hostApp.platform !== Platform.macOS || !this.canShareCyberduckPassword) {
-            return
-        }
-        this.cyberduck.setSharingEnabled(this.profile, enabled)
-    }
-
-    async revokeCyberduckPassword () {
-        if (this.hostApp.platform !== Platform.macOS || !this.canShareCyberduckPassword || this.revokingCyberduckPassword) {
-            return
-        }
-        this.revokingCyberduckPassword = true
-        try {
-            // The service confirms the exact endpoint and owns all Keychain feedback.
-            await this.cyberduck.revoke(this.profile)
-        } finally {
-            this.revokingCyberduckPassword = false
-        }
     }
 
     async addPrivateKey () {

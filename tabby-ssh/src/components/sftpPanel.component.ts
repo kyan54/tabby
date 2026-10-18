@@ -7,7 +7,9 @@ import { SSHSession } from '../session/ssh'
 import { SFTPContextMenuItemProvider } from '../api'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { SFTPCreateDirectoryModalComponent } from './sftpCreateDirectoryModal.component'
-import { normalizeSFTPSort, sortSFTPFiles, SFTPSortRule, SFTPSortField, SFTP_SORT_FIELDS } from '../sftpSorting'
+import { normalizeSFTPSort, sortSFTPFiles, sftpFileType, SFTPSortRule, SFTPSortField, SFTP_SORT_FIELDS } from '../sftpSorting'
+
+let nextSortEditorId = 0
 
 interface PathSegment {
     name: string
@@ -35,6 +37,12 @@ export class SFTPPanelComponent {
     sort: SFTPSortRule[]
     sortDraft: SFTPSortRule[] = []
     sortEditorOpen = false
+    sortEditorId = `sftp-advanced-sort-${nextSortEditorId++}`
+    sortColumns: { field: SFTPSortField, label: string }[] = [
+        { field: 'name', label: 'Name' }, { field: 'size', label: 'Size' },
+        { field: 'type', label: 'Type' }, { field: 'modified', label: 'Modified' },
+    ]
+
     sortFields = SFTP_SORT_FIELDS
 
     constructor (
@@ -95,6 +103,46 @@ export class SFTPPanelComponent {
         this.updateSortedList()
     }
 
+    sortPriority (field: SFTPSortField): number {
+        return this.sort.findIndex(rule => rule.field === field) + 1
+    }
+
+    sortDirection (field: SFTPSortField): string {
+        return this.sort.find(rule => rule.field === field)?.direction ?? ''
+    }
+
+    sortColumn (field: SFTPSortField, event: { shiftKey: boolean }): void {
+        const rules = this.sort.map(rule => ({ ...rule }))
+        const index = rules.findIndex(rule => rule.field === field)
+        if (index >= 0) {
+            if (event.shiftKey || index === 0) {
+                rules[index].direction = rules[index].direction === 'asc' ? 'desc' : 'asc'
+            }
+            if (!event.shiftKey) {
+                rules.unshift(...rules.splice(index, 1))
+            }
+        } else if (event.shiftKey) {
+            rules.push({ field, direction: 'asc' })
+        } else {
+            rules.unshift({ field, direction: 'asc' })
+        }
+        this.sort = normalizeSFTPSort(rules)
+        this.persistSort()
+    }
+
+    sortColumnKeydown (field: SFTPSortField, event: KeyboardEvent): void {
+        if (event.key === 'Enter' || event.key === ' ') {
+            // Keep Shift on keyboard activation and prevent a second native click.
+            event.preventDefault()
+            event.stopPropagation()
+            this.sortColumn(field, event)
+        }
+    }
+
+    fileType (item: SFTPFile): string {
+        return sftpFileType(item)
+    }
+
     openSortEditor (): void {
         if (this.sortEditorOpen) {
             return
@@ -144,6 +192,10 @@ export class SFTPPanelComponent {
             return
         }
         this.sort = normalizeSFTPSort(this.sortDraft)
+        this.persistSort()
+    }
+
+    private persistSort (): void {
         this.config.store.ssh.sftpSort.rules = this.sort.map(rule => ({ ...rule }))
         // Retain the primary rule for older versions that only understand one field.
         this.config.store.ssh.sftpSort.field = this.sort[0].field

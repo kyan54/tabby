@@ -50,13 +50,3 @@ if (process.platform === 'win32') {
         stdio: 'inherit',
     })
 }
-
-// The bridge is compiled only on macOS. Without a public signer-team pin it
-// remains disabled; no development bypass or expanded Keychain entitlement.
-if (process.platform === 'darwin') {
-    execFileSync(process.execPath, [
-        path.resolve(__dirname, '../native/cyberduck-keychain/build.mjs'),
-        '--electron-version', vars.electronVersion,
-        '--arch', process.env.ARCH,
-    ], { stdio: 'inherit' })
-}
