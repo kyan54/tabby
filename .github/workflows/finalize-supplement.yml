@@ -1,0 +1,69 @@
+name: Finalize verified supplemental platforms
+on:
+  push:
+    branches: [master]
+    paths: [.github/workflows/finalize-supplement.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - run: node --test scripts/supplement/policy.test.cjs
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').preflight(github, context)
+            const args={owner:'kyan54',repo:'tabby',run_id:39132620663}
+            const r=(await github.rest.actions.getWorkflowRun(args)).data
+            if(r.head_sha!=='cc45ee3aab9b7be58131fed10df68dedc96f5bf7'||r.path!=='.github/workflows/supplement-platforms.yml')throw Error('Wrong Mac recovery identity')
+            if(r.status!=='completed'){
+              const jobs=(await github.rest.actions.listJobsForWorkflowRun({...args,per_page:100})).data.jobs
+              const mac=jobs.find(j=>j.name==='macos (macos, x86_64)')
+              const append=jobs.find(j=>j.name==='append')
+              const artifacts=(await github.rest.actions.listWorkflowRunArtifacts({...args,per_page:100})).data.artifacts
+              if(mac?.conclusion!=='success'||!artifacts.some(a=>a.name==='supplement-macos-x86_64'&&!a.expired))throw Error('Intel verified artifacts not retained')
+              if(!append?.steps?.some(s=>s.name==='Collect current and previously validated producer artifacts'&&s.status==='in_progress'))throw Error('Old collector not safely waiting')
+              await github.rest.actions.cancelWorkflowRun(args)
+              core.info('Stopped only obsolete waiting collector; successful Intel artifact retained')
+            }
+  append:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    concurrency:
+      group: supplement-append-v1.0.238-fix
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Collect all six existing verified producers without rebuilding
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/collect.cjs').collect({github,context,core,directory:process.env.GITHUB_WORKSPACE+'/supplement-products'})
+      - name: Append complete verified whitelist only
+        uses: actions/github-script@v7
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').publish({github,context,core,directory:process.env.GITHUB_WORKSPACE+'/supplement-products'})

@@ -1,7 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process')
 const p=require('./policy.cjs'),{config}=require('./plan.cjs'),{hash}=require('./publish.cjs')
 async function collect({github,context,core,directory}){
- const ids=[context.runId,...config().reuse_runs],names=p.matrix.map(m=>`supplement-${m.platform}-${m.arch}`)
+ const ids=[...new Set([context.runId,...config().reuse_runs,...require('./artifact-runs.json')])],names=p.matrix.map(m=>`supplement-${m.platform}-${m.arch}`)
  let chosen=new Map()
  for(let attempt=0;attempt<360;attempt++){
   chosen=new Map();let priorRunning=false
