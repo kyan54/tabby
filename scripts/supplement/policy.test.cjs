@@ -184,3 +184,24 @@ else: raise AssertionError('Allowed frontend symlink')
   cp.execFileSync('python3',['-c',script,root,path.join(__dirname,'extract-frontend.py')],{stdio:'pipe'})
  }finally{fs.rmSync(root,{recursive:true,force:true})}
 })
+
+test('ARM Electron without arm_version resolves a generic SerialPort Release build',()=>{
+ const vm=require('node:vm'),root=fs.mkdtempSync(path.join(os.tmpdir(),'arm-napi-loader-'))
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),'{"name":"@serialport/bindings-cpp"}')
+  fs.mkdirSync(path.join(root,'prebuilds/linux-arm'),{recursive:true});fs.writeFileSync(path.join(root,'prebuilds/linux-arm/node.napi.armv7.node'),'fixture')
+  const exported={exports:{}},req=name=>name==='os'?{arch:()=> 'arm',platform:()=> 'linux'}:require(name)
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'fixtures/node-gyp-build-runtime-4.6.cjs'),'utf8'),{module:exported,exports:exported.exports,require:req,process:{env:{},config:{variables:{}},versions:{modules:'148',electron:'43.7.0',node:'24.21.0',uv:'1.52.0'},execPath:'/fixture/electron'},console,__dirname})
+  assert.throws(()=>exported.exports.resolve(root),/No native build was found/)
+  fs.mkdirSync(path.join(root,'build/Release'),{recursive:true});const generic=path.join(root,'build/Release/bindings.node');fs.writeFileSync(generic,'fixture')
+  assert.equal(exported.exports.resolve(root),generic)
+  const {options}=require('./armv7-native-preflight.cjs'),o=options('43.7.0');assert.equal(o.buildFromSource,true);assert.deepEqual(o.onlyModules,['@serialport/bindings-cpp']);assert.equal(o.arch,'arm')
+ }finally{fs.rmSync(root,{recursive:true,force:true})}
+})
+
+test('ARM package compression changes preserve five formats, version and no-publish guard',()=>{
+ const o=require('./armv7-package.cjs').options()
+ assert.deepEqual(o.linux,['deb','tar.gz','rpm','pacman','appimage']);assert.equal(o.armv7l,true)
+ assert.equal(o.config.extraMetadata.version,p.VERSION);assert.equal(o.publish,'never');assert.equal(o.config.npmRebuild,false)
+ for(const target of ['deb','rpm','pacman'])assert.equal(o.config[target].compression,'gzip')
+})
