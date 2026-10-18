@@ -98,7 +98,7 @@ test('global node-gyp path resolves in isolated lifecycle child and is removed f
 })
 
 test('final collection reuses exact four recovery runs and never schedules another producer',()=>{
- assert.deepEqual(require('./artifact-runs.json'),[39132516264,39132620663,39132795862,39133657854])
+ assert.deepEqual(require('./artifact-runs.json'),[39132516264,39132620663,39138005127,39133657854])
  const source=fs.readFileSync(path.resolve(__dirname,'../../.github/workflows/finalize-supplement.yml'),'utf8')
  assert.match(source,/runs-on: ubuntu-24.04/);assert.match(source,/mac\?\.conclusion!==\x27success\x27/)
  assert.match(source,/artifacts.some/);assert.match(source,/Collect current and previously validated producer artifacts/)
