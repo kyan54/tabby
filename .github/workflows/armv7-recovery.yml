@@ -1,0 +1,151 @@
+name: Recover ARMv7 without rebuilding verified platforms
+on:
+  push:
+    branches: [master]
+    paths: [.github/workflows/armv7-recovery.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - run: node --test scripts/supplement/policy.test.cjs
+      - uses: actions/github-script@v7
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').preflight(github,context)
+  armv7:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          ref: master
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: source
+          ref: b72b9b6e2feb7b5e352afd6b47c2f41fce3bfcf1
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - name: Restore this run's prepared ARMv7 source on a packaging retry
+        id: restore
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const a=(await github.rest.actions.listWorkflowRunArtifacts({owner:'kyan54',repo:'tabby',run_id:context.runId,per_page:100})).data.artifacts.find(a=>a.name==='supplement-armv7-prepared-source'&&!a.expired)
+            if(!a){core.setOutput('restored','false');return}
+            const cp=require('node:child_process'),path=require('node:path'),fs=require('node:fs')
+            const dir=path.join(process.env.RUNNER_TEMP,'tabby-armv7-prepared')
+            fs.mkdirSync(dir,{recursive:true})
+            cp.execFileSync('gh',['run','download',String(context.runId),'--repo','kyan54/tabby','--name',a.name,'--dir',dir],{stdio:'inherit'})
+            const sums=fs.readFileSync(path.join(dir,'armv7-prepared.sha256'),'utf8')
+            if(!/^[a-f0-9]{64}  armv7-prepared.tar.zst\n$/.test(sums))throw Error('Invalid prepared archive checksum')
+            cp.execFileSync('sha256sum',['-c','armv7-prepared.sha256'],{cwd:dir,stdio:'inherit'})
+            cp.execFileSync('tar',['--zstd','-xf',path.join(dir,'armv7-prepared.tar.zst'),'-C',process.env.GITHUB_WORKSPACE],{stdio:'inherit'})
+            const marker=JSON.parse(fs.readFileSync('source/.supplement-prepared.json'))
+            const p=require(process.env.GITHUB_WORKSPACE+'/control/scripts/supplement/policy.cjs')
+            if(marker.source!==p.SOURCE||marker.version!==p.VERSION||marker.arch!=='armv7l')throw Error('Wrong prepared source')
+            core.setOutput('restored','true')
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      - name: Start isolated ARMv7 worker with explicit AppImage interpreter
+        run: |
+          docker create --name tabby-qemu-source-${GITHUB_RUN_ID} tonistiigi/binfmt:latest --help
+          docker cp tabby-qemu-source-${GITHUB_RUN_ID}:/usr/bin/qemu-arm qemu-arm-static
+          docker rm tabby-qemu-source-${GITHUB_RUN_ID}
+          chmod +x qemu-arm-static
+          docker run -d --name tabby-armv7-${GITHUB_RUN_ID} --platform linux/arm/v7 -v "$GITHUB_WORKSPACE:/work" -w /work/source \
+            -e ARCH=armv7l -e TABBY_RELEASE_VERSION=1.0.238-fix -e RUST_TARGET_TRIPLE=armv7-unknown-linux-gnueabihf \
+            -e USE_HARD_LINKS=false -e KEYGEN_TOKEN= -e GITHUB_TOKEN= -e SUPPLEMENT_APPIMAGE_RUNNER=/work/control/scripts/supplement/appimage-armv7-runner.sh -e SUPPLEMENT_QEMU_ARM=/work/qemu-arm-static \
+            node:22-bookworm bash -lc 'sleep infinity'
+      - name: Prepare ARMv7 natives and reuse verified same-source frontend
+        run: docker exec tabby-armv7-${GITHUB_RUN_ID} bash /work/control/scripts/supplement/armv7.sh prepare
+      - name: Checkpoint compiled source before any package generation
+        if: steps.restore.outputs.restored != 'true'
+        run: |
+          tar --exclude=source/.git --exclude=source/dist --exclude=source/supplement-output --exclude=source/node_modules/.cache --zstd -cf armv7-prepared.tar.zst source
+          sha256sum armv7-prepared.tar.zst > armv7-prepared.sha256
+      - name: Preserve prepared source for package-only retries
+        if: steps.restore.outputs.restored != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplement-armv7-prepared-source
+          path: |
+            armv7-prepared.tar.zst
+            armv7-prepared.sha256
+          compression-level: 0
+          retention-days: 1
+      - name: Package five ARMv7 formats and validate actual runtime under QEMU
+        run: docker exec tabby-armv7-${GITHUB_RUN_ID} bash /work/control/scripts/supplement/armv7.sh package
+      - name: Upload verified ARMv7 products only
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplement-linux-armv7l
+          path: source/supplement-output/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Remove only this job's isolated worker
+        if: always()
+        run: docker rm -f tabby-armv7-${GITHUB_RUN_ID}
+  unlock:
+    needs: armv7
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const args={owner:'kyan54',repo:'tabby',run_id:39133988194}
+            const r=(await github.rest.actions.getWorkflowRun(args)).data
+            if(r.head_sha!=='b60b7afb2f7635875b8790ff379ef67416867062'||r.path!=='.github/workflows/finalize-supplement.yml')throw Error('Wrong obsolete collector identity')
+            if(r.status!=='completed'){
+              const jobs=(await github.rest.actions.listJobsForWorkflowRun({...args,per_page:100})).data.jobs
+              if(!jobs.find(j=>j.name==='append')?.steps?.some(s=>s.name==='Collect all six existing verified producers without rebuilding'&&s.status==='in_progress'))throw Error('Collector is not safely waiting')
+              await github.rest.actions.cancelWorkflowRun(args)
+            }
+  append:
+    needs: unlock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    concurrency:
+      group: supplement-append-v1.0.238-fix
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      - uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/collect.cjs').collect({github,context,core,directory:process.env.GITHUB_WORKSPACE+'/supplement-products'})
+      - uses: actions/github-script@v7
+        with:
+          script: await require(process.env.GITHUB_WORKSPACE+'/scripts/supplement/publish.cjs').publish({github,context,core,directory:process.env.GITHUB_WORKSPACE+'/supplement-products'})

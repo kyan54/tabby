@@ -39,3 +39,7 @@ version, architecture, native-load, package and smoke requirements. Missing
 producer evidence blocks append. The append job is serialized independently, so
 a repair producer can run while the original ARMv7 job continues. VS C++ toolsets
 and VC runtime directories are discovered from the installed runner toolchain.
+
+ARMv7 recovery uses Debian-native 7za, squashfs-tools and desktop-file-utils with the checksum-pinned original AppImage runtime. A real ARMv7 AppImage assembly/extraction fixture runs before dependency compilation. Explicit QEMU invocation preserves the binfmt target argv0; runtime bytes and host security settings are unchanged.
+
+To avoid repeating architecture-independent frontend compilation, recovery may copy only app/dist and plugin/dist from the original published, SHA-256-verified Mac arm64 ZIP at the same application commit/version. Native file extensions, ELF/PE/Mach-O magic and symlinks are rejected. ARMv7 native dependencies are rebuilt and validated independently, and frontend provenance is recorded in BUILD_INFO-additional.json. A prepared-source artifact is saved before packaging, allowing package-only retries in the same recovery run.

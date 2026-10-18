@@ -137,3 +137,30 @@ test('compatibility preload works through actual NODE_OPTIONS child process',()=
   assert.deepEqual(after,{'node-gyp':'./bin/node-gyp.js'})
  }finally{fs.rmSync(scratch,{recursive:true,force:true})}
 })
+
+test('reused frontend rejects native content and symlinks while preserving portable files',()=>{
+ const {portable,copyTree}=require('./reuse-frontend.cjs'),root=fs.mkdtempSync(path.join(os.tmpdir(),'frontend-policy-'))
+ try{
+  const file=path.join(root,'hidden.js');fs.writeFileSync(file,Buffer.from('7f454c4601010100','hex'));assert.throws(()=>portable(file),/Native binary/)
+  fs.writeFileSync(file,'console.log("portable")');assert.doesNotThrow(()=>portable(file))
+  const input=path.join(root,'input');fs.mkdirSync(input);fs.symlinkSync(file,path.join(input,'link.js'));assert.throws(()=>copyTree(input,path.join(root,'out')),/symlink/)
+ }finally{fs.rmSync(root,{recursive:true,force:true})}
+})
+
+test('explicit binfmt interpreter preserves the AppImage target argv0',()=>{
+ const cp=require('node:child_process'),root=fs.mkdtempSync(path.join(os.tmpdir(),'qemu-argv0-'))
+ try{
+  const interpreter=path.join(root,'qemu.cjs');fs.writeFileSync(interpreter,'#!/usr/bin/env node\nconsole.log(JSON.stringify(process.argv.slice(2)))\n');fs.chmodSync(interpreter,0o755)
+  const result=cp.execFileSync('bash',[path.join(__dirname,'appimage-armv7-runner.sh'),'/fixture/probe.AppImage','--appimage-extract'],{encoding:'utf8',env:{...process.env,SUPPLEMENT_QEMU_ARM:interpreter}})
+  assert.deepEqual(JSON.parse(result),['/fixture/probe.AppImage','/fixture/probe.AppImage','--appimage-extract'])
+ }finally{fs.rmSync(root,{recursive:true,force:true})}
+})
+
+test('ARMv7 recovery checkpoints compiled natives before packaging and retains full validation',()=>{
+ const workflow=fs.readFileSync(path.resolve(__dirname,'../../.github/workflows/armv7-recovery.yml'),'utf8')
+ assert.match(workflow,/runs-on: ubuntu-24.04/);assert.match(workflow,/ref: b72b9b6e2feb7b5e352afd6b47c2f41fce3bfcf1/)
+ assert.ok(workflow.indexOf('Preserve prepared source')<workflow.indexOf('Package five ARMv7 formats'))
+ assert.match(workflow,/sha256sum/);assert.match(workflow,/source\/\.supplement-prepared.json/)
+ const prepare=fs.readFileSync(path.join(__dirname,'armv7.sh'),'utf8');assert.match(prepare,/git diff --exit-code/);assert.match(prepare,/check.cjs linux armv7l/)
+ assert.match(prepare,/reuse-frontend.cjs/);assert.doesNotMatch(prepare,/git reset|git checkout.*--|yarn run build/)
+})

@@ -55,7 +55,7 @@ for(const name of p.namesFor(platform,arch)){
   try{
    if(name.endsWith('.deb'))run('dpkg-deb',['-x',file,scratch])
    else if(name.endsWith('.rpm'))run('bash',['-c','rpm2cpio "$1" | (cd "$2" && cpio -id --quiet --no-absolute-filenames)','bash',file,scratch])
-   else if(name.endsWith('.AppImage')){fs.chmodSync(file,0o755);run(file,['--appimage-extract'],{cwd:scratch})}
+   else if(name.endsWith('.AppImage')){fs.chmodSync(file,0o755);run(process.env.SUPPLEMENT_APPIMAGE_RUNNER||file,process.env.SUPPLEMENT_APPIMAGE_RUNNER?[file,'--appimage-extract']:['--appimage-extract'],{cwd:scratch})}
    else run('tar',['-xf',file,'-C',scratch])
    const entries=files(scratch),packed=entries.find(f=>f.endsWith('/resources/app.asar'))
    if(!packed)throw Error('Package has no app.asar: '+name)
@@ -67,4 +67,5 @@ for(const name of p.namesFor(platform,arch)){
 }
 const signed=platform==='macos'||process.env.WINDOWS_SIGNED==='true'
 const report={controlSource:run('git',['-C',path.resolve(__dirname,'../..'),'rev-parse','HEAD']).trim(),source:p.SOURCE,version:p.VERSION,platform,arch,versionVerified:true,nativeDependenciesVerified:true,nativeLoadPassed:true,nativeAddonCount:nativeCount,packageFormatsVerified:true,smokePassed:true,smoke:arch==='armv7l'?'CLI under QEMU ARMv7':'native CI CLI --version',signed,notarized:platform==='macos',gatekeeper:platform==='macos',files:p.namesFor(platform,arch).map(name=>{const f=path.join(out,name);return{name,bytes:fs.statSync(f).size,sha256:crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')}})}
+if(fs.existsSync(path.join(root,'.supplement-frontend-basis.json')))report.frontendBasis=JSON.parse(fs.readFileSync(path.join(root,'.supplement-frontend-basis.json')))
 fs.writeFileSync(path.join(out,`CHECKS-${platform}-${arch}.json`),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2))

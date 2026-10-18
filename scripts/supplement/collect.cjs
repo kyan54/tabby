@@ -3,7 +3,7 @@ const p=require('./policy.cjs'),{config}=require('./plan.cjs'),{hash}=require('.
 async function collect({github,context,core,directory}){
  const ids=[...new Set([context.runId,...config().reuse_runs,...require('./artifact-runs.json')])],names=p.matrix.map(m=>`supplement-${m.platform}-${m.arch}`)
  let chosen=new Map()
- for(let attempt=0;attempt<360;attempt++){
+ for(let attempt=0;attempt<120;attempt++){
   chosen=new Map();let priorRunning=false
   for(const id of ids){
    const artifacts=(await github.rest.actions.listWorkflowRunArtifacts({owner:'kyan54',repo:'tabby',run_id:id,per_page:100})).data.artifacts
@@ -11,9 +11,9 @@ async function collect({github,context,core,directory}){
    if(id!==context.runId){const r=(await github.rest.actions.getWorkflowRun({owner:'kyan54',repo:'tabby',run_id:id})).data;if(r.status!=='completed')priorRunning=true}
   }
   const missing=names.filter(n=>!chosen.has(n));if(!missing.length)break
-  if(!priorRunning||attempt===359)throw Error('Missing verified producer artifacts: '+missing.join(', '))
+  if(!priorRunning||attempt===119)throw Error('Missing verified producer artifacts: '+missing.join(', '))
   if(attempt%3===0)core.info('Waiting for original producers: '+missing.join(', '))
-  await new Promise(r=>setTimeout(r,20000))
+  await new Promise(r=>setTimeout(r,60000))
  }
  fs.mkdirSync(directory,{recursive:true})
  for(const name of names){

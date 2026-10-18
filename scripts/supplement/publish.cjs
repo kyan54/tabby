@@ -5,6 +5,7 @@ function validate(directory){
  const reports=policy.matrix.map(({platform,arch})=>{
   const r=JSON.parse(fs.readFileSync(path.join(directory,`CHECKS-${platform}-${arch}.json`)))
   if(r.source!==policy.SOURCE||r.version!==policy.VERSION||r.platform!==platform||r.arch!==arch||!r.nativeDependenciesVerified||!r.nativeLoadPassed||!r.versionVerified||!r.smokePassed||!r.packageFormatsVerified)throw Error('Incomplete platform evidence: '+platform+'/'+arch)
+  if(r.frontendBasis&&(r.frontendBasis.source!==policy.SOURCE||r.frontendBasis.version!==policy.VERSION||r.frontendBasis.basisSha256!==policy.original.find(f=>f.name.endsWith('arm64.zip')).sha256))throw Error('Invalid frontend provenance')
   if(platform==='macos'&&(!r.signed||!r.notarized||!r.gatekeeper))throw Error('Intel Mac must be signed and notarized')
   const wanted=policy.namesFor(platform,arch)
   if(r.files.length!==wanted.length||!wanted.every(n=>r.files.some(f=>f.name===n)))throw Error('Product whitelist mismatch')
