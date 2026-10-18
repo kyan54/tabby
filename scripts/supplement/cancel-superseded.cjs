@@ -1,4 +1,4 @@
-const allowed=new Map([[39129110968,'f3b6cc9279462e1e6186a8be7b9db51c5e7bab08']])
+const allowed=new Map([[39129110968,'f3b6cc9279462e1e6186a8be7b9db51c5e7bab08'],[39130928545,'7a244e460b27d3caddeb03b4534cc2c2c14b9116']])
 async function cancelSuperseded({github,context,core}){
  if(context.repo.owner!=='kyan54'||context.repo.repo!=='tabby')throw Error('Wrong repository')
  for(const [id,sha]of allowed){
