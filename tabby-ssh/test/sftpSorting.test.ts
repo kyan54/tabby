@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { normalizeSFTPSort, sortSFTPFiles, sftpFileType } from '../src/sftpSorting.ts'
+import { normalizeSFTPSort, sortSFTPFiles } from '../src/sftpSorting.ts'
 import type { SFTPSortDirection, SFTPSortField } from '../src/sftpSorting.ts'
 
 const listing = () => [
@@ -93,25 +93,16 @@ describe('SFTP multi-field sorting', () => {
 })
 
 
-describe('SFTP extension type sorting', () => {
-    it('uses lowercase final extensions, handles dotfiles and extensionless names consistently', () => {
-        const files = ['z.TXT', '.env', 'a.txt', 'archive.tar.GZ', 'README', 'trailing.', '.config.JSON']
-            .map(name => ({ ...listing()[0], name }))
-        assert.deepEqual(files.map(sftpFileType), ['.txt', 'File', '.txt', '.gz', 'File', 'File', '.json'])
-        const sorted = sortSFTPFiles(files, [{ field: 'type', direction: 'asc' }, { field: 'name', direction: 'desc' }])
-        assert.deepEqual(sorted.map(x => x.name), ['trailing.', 'README', '.env', 'archive.tar.GZ', '.config.JSON', 'z.TXT', 'a.txt'])
-        assert.deepEqual(normalizeSFTPSort({ rules: [{ field: 'type', direction: 'desc' }, { field: 'size', direction: 'asc' }] }),
-            [{ field: 'type', direction: 'desc' }, { field: 'size', direction: 'asc' }])
-        assert.equal(sftpFileType({ name: 'dir.txt', isDirectory: true }), 'Folder')
+describe('removed Type sort compatibility', () => {
+    it('drops only invisible Type rules and retains visible rule order and direction', () => {
+        assert.deepEqual(normalizeSFTPSort({ rules: [{ field: 'type', direction: 'desc' }, { field: 'size', direction: 'desc' }, { field: 'modified', direction: 'asc' }] }),
+            [{ field: 'size', direction: 'desc' }, { field: 'modified', direction: 'asc' }])
     })
-    it('keeps directories first in either direction and breaks equal types by name', () => {
-        for (const direction of ['asc', 'desc'] as const) {
-            const sorted = sortSFTPFiles(listing(), [{ field: 'type', direction }])
-            assert.deepEqual(sorted.map(x => x.name), ['a-folder', 'z-folder', 'a.txt', 'b.txt', 'c.txt'])
-        }
+    it('clears a Type-only selection without introducing a hidden default name sort', () => {
+        assert.deepEqual(normalizeSFTPSort({ field: 'type', direction: 'desc' }), [])
+        assert.deepEqual(normalizeSFTPSort({ rules: [{ field: 'type', direction: 'asc' }] }), [])
     })
 })
-
 
 describe('SFTP explicitly disabled ordering', () => {
     it('distinguishes missing defaults and legacy settings from explicit empty rules', () => {

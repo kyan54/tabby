@@ -1,14 +1,12 @@
 import type { SFTPFile } from './session/sftp'
 
-export type SFTPSortField = 'name'|'modified'|'size'|'type'
+export type SFTPSortField = 'name'|'modified'|'size'
 export type SFTPSortDirection = 'asc'|'desc'
 
 export interface SFTPSortRule {
     field: SFTPSortField
     direction: SFTPSortDirection
 }
-
-export const SFTP_SORT_FIELDS: SFTPSortField[] = ['name', 'modified', 'size', 'type']
 
 /** Accept old single-field settings and sanitize ordered, unique sort rules. */
 export function normalizeSFTPSort (value: unknown): SFTPSortRule[] {
@@ -20,25 +18,22 @@ export function normalizeSFTPSort (value: unknown): SFTPSortRule[] {
     }
     const rawRules: unknown[] = Array.isArray(value) ? value : Array.isArray(storedRules) ? storedRules : [candidate]
     const rules: SFTPSortRule[] = []
+    let removedLegacyType = false
     for (const raw of rawRules) {
         const rule = raw as { field?: unknown, direction?: unknown }|null|undefined
-        if (rule?.field !== 'name' && rule?.field !== 'modified' && rule?.field !== 'size' && rule?.field !== 'type') {
+        if (rule?.field === 'type') {
+            // The removed editor was the only way to see/control this field.
+            removedLegacyType = true
+            continue
+        }
+        if (rule?.field !== 'name' && rule?.field !== 'modified' && rule?.field !== 'size') {
             continue
         }
         if (!rules.some(x => x.field === rule.field)) {
             rules.push({ field: rule.field, direction: rule.direction === 'desc' ? 'desc' : 'asc' })
         }
     }
-    return rules.length ? rules : [{ field: 'name', direction: 'asc' }]
-}
-
-/** Dotfiles without a second dot and trailing dots have no extension. */
-export function sftpFileType (file: Pick<SFTPFile, 'name'|'isDirectory'>): string {
-    if (file.isDirectory) {
-        return 'Folder'
-    }
-    const dot = file.name.lastIndexOf('.')
-    return dot > 0 && dot < file.name.length - 1 ? file.name.slice(dot).toLowerCase() : 'File'
+    return rules.length || removedLegacyType ? rules : [{ field: 'name', direction: 'asc' }]
 }
 
 function numericValue (file: SFTPFile, field: 'modified'|'size'): number|null {
@@ -57,9 +52,6 @@ export function sortSFTPFiles (files: readonly SFTPFile[], rules: readonly SFTPS
             let comparison = 0
             if (rule.field === 'name') {
                 comparison = a.name.localeCompare(b.name)
-            } else if (rule.field === 'type') {
-                const typeKey = (file: SFTPFile) => sftpFileType(file) === 'File' ? '' : sftpFileType(file)
-                comparison = typeKey(a).localeCompare(typeKey(b))
             } else {
                 const av = numericValue(a, rule.field)
                 const bv = numericValue(b, rule.field)
